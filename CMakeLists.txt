@@ -43,8 +43,43 @@ if(NOT Kokkos_FOUND)
     FetchContent_MakeAvailable(kokkos)
 endif()
 
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/$<CONFIGURATION>")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/$<CONFIGURATION>")
+
+
+include(FetchContent)
+
+set(SDL_SHARED OFF)
+set(SDL_STATIC ON)
+set(BUILD_SHARED_LIBS OFF)
+set(SDLIMAGE_DEPS_SHARED OFF)
+set(SDLNET_DEPS_SHARED OFF)
+# set(SDL_STATIC_PIC ON)
+
+FetchContent_Declare(
+  sdl3
+  GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
+  GIT_TAG        badbf8da4ee72b3ef599c721ffc9899e8d7c8d90 # release-3.2.26
+)
+
+FetchContent_Declare(
+  sdl3_image
+  GIT_REPOSITORY https://github.com/libsdl-org/SDL_image.git
+  GIT_TAG        11154afb7855293159588b245b446a4ef09e574f # release-3.2.4
+)
+
+FetchContent_Declare(
+  sdl3_net
+  GIT_REPOSITORY https://github.com/libsdl-org/SDL_net.git
+  GIT_TAG        c2757cbbcbed2fd8ed98b79c66447f292221c81c # main
+)
+
+FetchContent_MakeAvailable(sdl3 sdl3_image sdl3_net)
+
+
 enable_testing()
 
 add_subdirectory(src)
 add_subdirectory(executables)
+add_subdirectory(milestone02)
 add_subdirectory(tests)
