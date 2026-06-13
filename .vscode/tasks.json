@@ -1,0 +1,23 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "create project context",
+            "command": "python3",
+            "type": "shell",
+            "args": [
+                "~/Studium/repos/dev-context.py",
+                "-o",
+                "${workspaceFolder}/project-context.txt",
+                "${workspaceFolder}",
+            ],
+            // "problemMatcher": [
+            //     "$tsc"
+            // ],
+            "presentation": {
+                "reveal": "always"
+            },
+            "group": "build"
+        }
+    ]
+}

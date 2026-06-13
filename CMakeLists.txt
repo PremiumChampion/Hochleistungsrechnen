@@ -4,7 +4,7 @@ if(POLICY CMP0135)
 endif()
 project(my-fantastic-simulation-code LANGUAGES C CXX VERSION 0.1)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -30,18 +30,19 @@ if(NOT Eigen3_FOUND)
         add_library(Eigen3::Eigen ALIAS eigen)
     endif()
 endif()
-
-find_package(Kokkos 4.7.03)
-if(NOT Kokkos_FOUND)
-    include(FetchContent)
-    FetchContent_Declare(
-      kokkos
-      URL https://github.com/kokkos/kokkos/archive/refs/tags/4.7.03.tar.gz
-    )
-    set(Kokkos_ENABLE_TESTS OFF CACHE BOOL "Disable Kokkos tests" FORCE)
-    set(Kokkos_ENABLE_EXAMPLES OFF CACHE BOOL "Disable Kokkos examples" FORCE)
-    FetchContent_MakeAvailable(kokkos)
-endif()
+# set(Kokkos_DIR "~/kokkos-install/lib/cmake/Kokkos")
+find_package(Kokkos REQUIRED)
+# find_package(Kokkos 4.7.03)
+# if(NOT Kokkos_FOUND)
+#     include(FetchContent)
+#     FetchContent_Declare(
+#       kokkos
+#       URL https://github.com/kokkos/kokkos/archive/refs/tags/4.7.03.tar.gz
+#     )
+#     set(Kokkos_ENABLE_TESTS OFF CACHE BOOL "Disable Kokkos tests" FORCE)
+#     set(Kokkos_ENABLE_EXAMPLES OFF CACHE BOOL "Disable Kokkos examples" FORCE)
+#     FetchContent_MakeAvailable(kokkos)
+# endif()
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/$<CONFIGURATION>")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/$<CONFIGURATION>")
@@ -78,8 +79,9 @@ FetchContent_MakeAvailable(sdl3 sdl3_image sdl3_net)
 
 
 enable_testing()
-
-add_subdirectory(src)
-add_subdirectory(executables)
-add_subdirectory(milestone02)
-add_subdirectory(tests)
+add_subdirectory(fluid_simulation)
+add_subdirectory(project)
+add_subdirectory(serial)
+add_subdirectory(project_video_export)
+add_subdirectory(milestone04)
+add_subdirectory(milestone05)
