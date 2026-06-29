@@ -14,7 +14,6 @@
 #include <SDL3/SDL.h>
 
 void serialize(const simulation &sim, const std::string &filename) {
-    // Create host mirrors to copy data from the device (GPU) to the host (CPU)
     auto rho_h = Kokkos::create_mirror_view(sim.rho);
     auto v_h = Kokkos::create_mirror_view(sim.v);
     auto f_h = Kokkos::create_mirror_view(sim.f);
@@ -30,16 +29,14 @@ void serialize(const simulation &sim, const std::string &filename) {
         return;
     }
 
-    int Nx = sim.Nx;
-    int Ny = sim.Ny;
+    int Nx = sim.global_Nx;
+    int Ny = sim.global_Ny;
     double omega = sim.omega;
 
-    // Write header (dimensions and parameter)
     out.write(reinterpret_cast<const char *>(&Nx), sizeof(int));
     out.write(reinterpret_cast<const char *>(&Ny), sizeof(int));
     out.write(reinterpret_cast<const char *>(&omega), sizeof(double));
 
-    // Write raw view data
     out.write(reinterpret_cast<const char *>(rho_h.data()),
               rho_h.size() * sizeof(double));
     out.write(reinterpret_cast<const char *>(v_h.data()),
@@ -61,26 +58,21 @@ void deserialize(simulation &sim, const std::string &filename) {
     int Nx, Ny;
     double omega;
 
-    // Read header
     in.read(reinterpret_cast<char *>(&Nx), sizeof(int));
     in.read(reinterpret_cast<char *>(&Ny), sizeof(int));
     in.read(reinterpret_cast<char *>(&omega), sizeof(double));
 
-    // Initialize the simulation with the loaded dimensions and omega
-    // This allocates the necessary Kokkos views (including f_next)
     sim = simulation(Nx, Ny, omega);
 
     auto rho_h = Kokkos::create_mirror_view(sim.rho);
     auto v_h = Kokkos::create_mirror_view(sim.v);
     auto f_h = Kokkos::create_mirror_view(sim.f);
 
-    // Read raw view data
     in.read(reinterpret_cast<char *>(rho_h.data()),
             rho_h.size() * sizeof(double));
     in.read(reinterpret_cast<char *>(v_h.data()), v_h.size() * sizeof(double));
     in.read(reinterpret_cast<char *>(f_h.data()), f_h.size() * sizeof(double));
 
-    // Copy data from host back to the device
     Kokkos::deep_copy(sim.rho, rho_h);
     Kokkos::deep_copy(sim.v, v_h);
     Kokkos::deep_copy(sim.f, f_h);
@@ -100,12 +92,10 @@ int main(int argc, char *argv[]) {
     {
         if (argc < 3) {
             if (rank == 0) {
-                std::cout << "Usage: ./project_serial <save|load> <filename> "
+                std::cout << "Usage: ./serial <save|load> <filename> "
                              "[steps_for_save]\n";
-                std::cout << "Example save: ./project_serial save "
-                             "sim_state.bin 100\n";
-                std::cout
-                    << "Example load: ./project_serial load sim_state.bin\n";
+                std::cout << "Example save: ./serial save sim_state.bin 100\n";
+                std::cout << "Example load: ./serial load sim_state.bin\n";
             }
         } else {
             std::string mode = argv[1];
@@ -118,7 +108,7 @@ int main(int argc, char *argv[]) {
 
                 uint Nx = 150 * 4;
                 uint Ny = 100 * 4;
-                simulation sim{Nx, Ny, 1.0};
+                simulation sim{static_cast<int>(Nx), static_cast<int>(Ny), 1.0};
 
                 size_t steps = 100;
                 if (argc > 3)
@@ -138,14 +128,12 @@ int main(int argc, char *argv[]) {
                 simulation sim;
                 deserialize(sim, filename);
 
-                int Nx = sim.Nx;
-                int Ny = sim.Ny;
+                int Nx = sim.global_Nx;
+                int Ny = sim.global_Ny;
 
-                // SDL3 SETUP (Only on Rank 0)
                 SDL_Window *window = nullptr;
                 SDL_Renderer *renderer = nullptr;
                 SDL_Texture *texture = nullptr;
-                std::vector<uint32_t> pixels(Nx * Ny);
 
                 if (rank == 0) {
                     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
@@ -165,39 +153,18 @@ int main(int argc, char *argv[]) {
                     }
                 }
 
-                auto v_host = Kokkos::create_mirror_view(sim.v);
                 bool quit = false;
 
                 while (!quit) {
-                    sim.step(10); // Continue simulation from deserialized state
+                    sim.step(10);
+
+                    auto pixels = sim.get_global_rgb_speed();
 
                     if (rank == 0) {
                         SDL_Event e;
                         while (SDL_PollEvent(&e)) {
-                            if (e.type == SDL_EVENT_QUIT) {
+                            if (e.type == SDL_EVENT_QUIT)
                                 quit = true;
-                            }
-                        }
-
-                        Kokkos::deep_copy(v_host, sim.v);
-
-                        for (int y = 0; y < Ny; ++y) {
-                            for (int x = 0; x < Nx; ++x) {
-                                double vx = v_host(x, y, 0);
-                                double vy = v_host(x, y, 1);
-                                double speed = std::sqrt(vx * vx + vy * vy);
-                                double intensity = std::min(speed / 0.1, 1.0);
-
-                                uint8_t r =
-                                    static_cast<uint8_t>(intensity * 255);
-                                uint8_t g = 0;
-                                uint8_t b = static_cast<uint8_t>(
-                                    (1.0 - intensity) * 255);
-                                uint8_t a = 255;
-
-                                pixels[y * Nx + x] =
-                                    (r << 24) | (g << 16) | (b << 8) | a;
-                            }
                         }
 
                         if (texture && renderer) {
@@ -210,7 +177,6 @@ int main(int argc, char *argv[]) {
                         }
                     }
 
-                    // Sync the "quit" state to all other MPI processes
                     int quit_int = quit ? 1 : 0;
                     MPI_Bcast(&quit_int, 1, MPI_INT, 0, MPI_COMM_WORLD);
                     quit = (quit_int == 1);

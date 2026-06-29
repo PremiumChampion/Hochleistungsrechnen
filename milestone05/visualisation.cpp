@@ -6,7 +6,6 @@
 #include <mpi.h>
 #include <vector>
 
-// Include SDL3
 #include <SDL3/SDL.h>
 
 int main(int argc, char *argv[]) {
@@ -21,8 +20,8 @@ int main(int argc, char *argv[]) {
 
     {
         // Setup Grid and Cavity Parameters
-        uint Nx = 256;
-        uint Ny = 256;
+        int Nx = 256;
+        int Ny = 256;
         double u_lid = 0.1;
         double omega = 1.7;
 
@@ -31,7 +30,6 @@ int main(int argc, char *argv[]) {
             std::cout << "Grid: " << Nx << "x" << Ny << "\n";
             std::cout << "Omega: " << omega << ", Lid Velocity: " << u_lid
                       << "\n";
-            std::cout << "Close the window to exit.\n";
         }
 
         // Initialize simulation with Hard Walls (bounce = true) and Empty
@@ -39,9 +37,7 @@ int main(int argc, char *argv[]) {
         simulation sim{Nx, Ny, omega, InitialisationPattern::Empty, true};
         sim.u_lid = u_lid;
 
-        // =========================================================================
         // SDL3 SETUP (Only on Rank 0)
-        // =========================================================================
         SDL_Window *window = nullptr;
         SDL_Renderer *renderer = nullptr;
         SDL_Texture *texture = nullptr;
@@ -55,7 +51,7 @@ int main(int argc, char *argv[]) {
 
             // Scale the window up by a factor of 2 so it is easier to see
             int window_width = Nx * 2;
-            int window_height = Ny * 2;
+            int window_height = sim.global_Ny * 2;
             window = SDL_CreateWindow("Lid-Driven Cavity Flow", window_width,
                                       window_height, 0);
 
@@ -63,32 +59,25 @@ int main(int argc, char *argv[]) {
             // dimensions
             renderer = SDL_CreateRenderer(window, nullptr);
             texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888,
-                                        SDL_TEXTUREACCESS_STREAMING, Nx, Ny);
+                                        SDL_TEXTUREACCESS_STREAMING, Nx,
+                                        sim.global_Ny);
         }
 
         bool quit = false;
         size_t render_after_steps = 15;
 
-        // Run until the user closes the window
         while (!quit) {
-            // Compute physics steps
+            // Run until the user closes the window
             sim.step(render_after_steps);
+            auto h_pixels = sim.get_global_rgb_direction();
 
-            // Rank 0 handles the GUI and Events
             if (rank == 0) {
                 SDL_Event e;
                 while (SDL_PollEvent(&e)) {
-                    if (e.type == SDL_EVENT_QUIT) {
+                    if (e.type == SDL_EVENT_QUIT)
                         quit = true;
-                    }
                 }
 
-                // Copy only the computed color pixels from Device (GPU) to Host
-                // (CPU)
-                auto h_pixels = Kokkos::create_mirror_view_and_copy(
-                    Kokkos::HostSpace{}, sim.rgb_direction);
-
-                // Push pixels to the SDL texture and render
                 SDL_UpdateTexture(texture, nullptr, h_pixels.data(),
                                   Nx * sizeof(uint32_t));
                 SDL_RenderClear(renderer);
@@ -96,8 +85,6 @@ int main(int argc, char *argv[]) {
                 SDL_RenderPresent(renderer);
             }
 
-            // Sync the "quit" state to all other MPI processes so they exit
-            // together
             int quit_int = quit ? 1 : 0;
             MPI_Bcast(&quit_int, 1, MPI_INT, 0, MPI_COMM_WORLD);
             quit = (quit_int == 1);

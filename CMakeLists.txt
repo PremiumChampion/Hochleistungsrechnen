@@ -77,7 +77,6 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(sdl3 sdl3_image sdl3_net)
 
-
 enable_testing()
 add_subdirectory(fluid_simulation)
 add_subdirectory(project)
@@ -85,3 +84,4 @@ add_subdirectory(serial)
 add_subdirectory(project_video_export)
 add_subdirectory(milestone04)
 add_subdirectory(milestone05)
+add_subdirectory(milestone06)

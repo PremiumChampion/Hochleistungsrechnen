@@ -21,26 +21,23 @@ int main(int argc, char *argv[]) {
 
     {
         // Setup Grid and Cavity Parameters with a large canvas
-        uint Nx = 1024;
-        uint Ny = 1024;
+        int Nx = 1024;
+        int Ny = 1024;
         double u_lid = 0.1;
         double omega = 1.7;
 
         simulation sim{Nx, Ny, omega, InitialisationPattern::Empty, true};
         sim.u_lid = u_lid;
 
-        auto rgb_host = Kokkos::create_mirror_view(sim.rgb_direction);
-
         size_t render_after_steps = 15;
-        size_t total_frames = 2000; // Total frames to render for the video
+        size_t total_frames = 2000;
 
         FILE *ffmpeg = nullptr;
 
-        // Only Rank 0 handles the video encoding
         if (rank == 0) {
-            // Open a pipe to FFmpeg.
             std::string cmd = "ffmpeg -y -f rawvideo -pix_fmt abgr -s " +
-                              std::to_string(Nx) + "x" + std::to_string(Ny) +
+                              std::to_string(Nx) + "x" +
+                              std::to_string(sim.global_Ny) +
                               " -r 60 -i - -c:v libx264 -pix_fmt yuv420p "
                               "milestone05_video.mp4";
 
@@ -54,20 +51,17 @@ int main(int argc, char *argv[]) {
             }
         }
 
-        // Start timing
         auto start_time = std::chrono::high_resolution_clock::now();
 
-        // Simulation and Recording Loop
         for (size_t frame = 0; frame < total_frames; ++frame) {
             sim.step(render_after_steps);
+            auto h_pixels = sim.get_global_rgb_direction();
 
             if (rank == 0 && ffmpeg) {
-                Kokkos::deep_copy(rgb_host, sim.rgb_direction);
-
                 // Write the raw pixel buffer directly to FFmpeg
-                size_t written =
-                    fwrite(rgb_host.data(), sizeof(uint32_t), Nx * Ny, ffmpeg);
-                if (written != Nx * Ny) {
+                size_t written = fwrite(h_pixels.data(), sizeof(uint32_t),
+                                        Nx * sim.global_Ny, ffmpeg);
+                if (written != static_cast<size_t>(Nx * sim.global_Ny)) {
                     std::cerr << "Error writing frame to FFmpeg pipe!\n";
                 }
 

@@ -11,21 +11,6 @@
 #include <SDL3/SDL.h>
 #include <cstdint>
 
-// Helper function to map velocity to an RGBA color
-uint32_t velocity_to_color(double vx, double vy, double max_vel = 0.1) {
-    double speed = std::sqrt(vx * vx + vy * vy);
-    double intensity = std::min(speed / max_vel, 1.0);
-
-    // Heatmap gradient: Blue (slow) to Red (fast)
-    uint8_t r = static_cast<uint8_t>(intensity * 255);
-    uint8_t g = 0;
-    uint8_t b = static_cast<uint8_t>((1.0 - intensity) * 255);
-    uint8_t a = 255;
-
-    // SDL_PIXELFORMAT_RGBA8888 standard bit-shifting
-    return (r << 24) | (g << 16) | (b << 8) | a;
-}
-
 int main(int argc, char *argv[]) {
     int rank = 0, size = 1;
 
@@ -39,17 +24,14 @@ int main(int argc, char *argv[]) {
     {
         std::cout << "Hello I am rank " << rank << " of " << size << "\n";
 
-        uint Nx = 150 * 4;
-        uint Ny = 100 * 4;
+        int Nx = 150 * 4;
+        int Ny = 100 * 4;
         simulation sim{Nx, Ny, 0.1};
 
-        // =========================================================================
         // SDL3 SETUP (Only on Rank 0)
-        // =========================================================================
         SDL_Window *window = nullptr;
         SDL_Renderer *renderer = nullptr;
         SDL_Texture *texture = nullptr;
-        // std::vector<uint32_t> pixels(Nx * Ny);
 
         if (rank == 0) {
             if (SDL_Init(SDL_INIT_VIDEO) < 0) {
@@ -69,33 +51,26 @@ int main(int argc, char *argv[]) {
 
             // Create a texture matching the simulation grid dimensions
             texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888,
-                                        SDL_TEXTUREACCESS_STREAMING, Nx, Ny);
+                                        SDL_TEXTUREACCESS_STREAMING, Nx,
+                                        sim.global_Ny);
         }
 
         bool quit = false;
-        int step = 0;
-
         size_t render_after_steps = 10;
         // Run until the user closes the window
         while (!quit) {
 
             // do the simulation
             sim.step(render_after_steps);
+            auto h_pixels = sim.get_global_rgb_speed();
 
-            // Rank 0 handles the GUI and Events
             if (rank == 0) {
                 SDL_Event e;
                 while (SDL_PollEvent(&e)) {
-                    if (e.type == SDL_EVENT_QUIT) {
+                    if (e.type == SDL_EVENT_QUIT)
                         quit = true;
-                    }
                 }
 
-                // Copy only the computed pixels from Device to Host
-                auto h_pixels = Kokkos::create_mirror_view_and_copy(
-                    Kokkos::HostSpace{}, sim.rgb_speed);
-
-                // Push pixels to the SDL texture and render
                 SDL_UpdateTexture(texture, nullptr, h_pixels.data(),
                                   Nx * sizeof(uint32_t));
                 SDL_RenderClear(renderer);
@@ -108,7 +83,6 @@ int main(int argc, char *argv[]) {
             int quit_int = quit ? 1 : 0;
             MPI_Bcast(&quit_int, 1, MPI_INT, 0, MPI_COMM_WORLD);
             quit = (quit_int == 1);
-            step++;
         }
 
         if (rank == 0) {

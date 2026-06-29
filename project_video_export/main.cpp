@@ -20,13 +20,10 @@ int main(int argc, char *argv[]) {
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
     {
-        size_t Nx = 1920 / 2;
-        size_t Ny = 1080 / 2;
+        int Nx = 1920 / 2;
+        int Ny = 1080 / 2;
 
         simulation sim{Nx, Ny, 1};
-
-        auto rgb_host = Kokkos::create_mirror_view(sim.rgb_speed);
-        // std::vector<uint32_t> pixels(Nx * Ny);
 
         size_t render_after_steps = 10;
         size_t total_frames = 2000; // Total frames to render for the video
@@ -47,7 +44,7 @@ int main(int argc, char *argv[]) {
             // players) output.mp4: the output video file name
             std::string cmd =
                 "ffmpeg -y -f rawvideo -pix_fmt abgr -s " + std::to_string(Nx) +
-                "x" + std::to_string(Ny) +
+                "x" + std::to_string(sim.global_Ny) +
                 " -r 60 -i - -c:v libx264 -pix_fmt yuv420p output.mp4";
 
             ffmpeg = popen(cmd.c_str(), "w");
@@ -65,14 +62,13 @@ int main(int argc, char *argv[]) {
         // Simulation and Recording Loop
         for (size_t frame = 0; frame < total_frames; ++frame) {
             sim.step(render_after_steps);
+            auto h_pixels = sim.get_global_rgb_speed();
 
             if (rank == 0 && ffmpeg) {
-                Kokkos::deep_copy(rgb_host, sim.rgb_speed);
-
                 // Write the raw pixel buffer directly to FFmpeg
-                size_t written =
-                    fwrite(rgb_host.data(), sizeof(uint32_t), Nx * Ny, ffmpeg);
-                if (written != Nx * Ny) {
+                size_t written = fwrite(h_pixels.data(), sizeof(uint32_t),
+                                        Nx * sim.global_Ny, ffmpeg);
+                if (written != static_cast<size_t>(Nx * sim.global_Ny)) {
                     std::cerr << "Error writing frame to FFmpeg pipe!\n";
                 }
 
