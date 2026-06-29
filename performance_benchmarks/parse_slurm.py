@@ -1,106 +1,68 @@
-import os
 import re
-import pandas as pd
-import matplotlib.pyplot as plt
+import csv
+import glob
+import os
 
-def parse_slurm_files(directory="."):
-    data = []
-    
-    # Regex patterns based on your file format
+def parse_slurm_files(directory_path, output_csv):
+    # Define the regex patterns for each field
     patterns = {
-        "nodes": re.compile(r"Running on (\d+) nodes"),
-        "cores_per_node": re.compile(r"with (\d+) cores each"),
-        "ranks": re.compile(r"distributed over (\d+) ranks"),
-        "runtime": re.compile(r"Runtime:\s+([\d.]+)\s+s"),
-        "performance": re.compile(r"Performance:\s+([\d.]+)\s+MLUPS"),
-        "walltime": re.compile(r"Job Wall-clock time:\s+(\d+:\d+:\d+)")
+        "Total Mass": r"Total mass:\s+([\d.e+-]+)",
+        "Kinetic Energy": r"Total kinetic energy:\s+([\d.]+)",
+        "Runtime (s)": r"Runtime:\s+([\d.]+)\s+s",
+        "Performance (MLUPS)": r"Performance:\s+([\d.]+)\s+MLUPS",
+        "Real Time": r"real\s+(\d+m[\d.]+s)",
+        "User Time": r"user\s+(\d+m[\d.]+s)",
+        "Sys Time": r"sys\s+(\d+m[\d.]+s)",
+        "Nodes": r"Nodes:\s+(\d+)",
+        "Cores per node": r"Cores per node:\s+(\d+)",
+        "CPU Utilized": r"CPU Utilized:\s+([\d:]+)",
+        "CPU Efficiency": r"CPU Efficiency:\s+([\d.]+% of [\d:]+ core-walltime)",
+        "Wall-clock time": r"Job Wall-clock time:\s+([\d:]+)",
+        "State": r"State:\s+(.*)"
     }
 
-    for filename in os.listdir(directory):
-        if filename.startswith("slurm-") and filename.endswith(".out"):
-            filepath = os.path.join(directory, filename)
-            file_info = {"filename": filename}
-            
-            with open(filepath, 'r') as f:
-                content = f.read()
-                
-                for key, pattern in patterns.items():
-                    match = pattern.search(content)
-                    if match:
-                        file_info[key] = match.group(1)
-            
-            # Check if we found the essential metrics before adding
-            if "runtime" in file_info and "performance" in file_info:
-                # Convert numeric types
-                file_info["nodes"] = int(file_info.get("nodes", 0))
-                file_info["cores_per_node"] = int(file_info.get("cores_per_node", 0))
-                file_info["ranks"] = int(file_info.get("ranks", 0))
-                file_info["total_cores"] = file_info["nodes"] * file_info["cores_per_node"]
-                file_info["runtime"] = float(file_info["runtime"])
-                file_info["performance"] = float(file_info["performance"])
-                
-                data.append(file_info)
+    # Prepare the list to hold all extracted data
+    data_rows = []
 
-    return pd.DataFrame(data)
-
-def generate_plots(df):
-    if df.empty:
-        print("No data found to plot.")
+    # Find all files matching the pattern
+    files = glob.glob(os.path.join(directory_path, "slurm-*.out"))
+    
+    if not files:
+        print("No files found matching slurm-*.out")
         return
 
-    # Sort data by total cores for logical line plotting
-    df = df.sort_values("total_cores")
+    print(f"Processing {len(files)} files...")
 
-    fig, ax1 = plt.subplots(figsize=(10, 6))
+    for file_path in files:
+        # Initialize a dictionary for this file with None values
+        file_data = {key: None for key in patterns.keys()}
+        file_data["Filename"] = os.path.basename(file_path)
 
-    # --- Plot Runtime (Left Axis) ---
-    color_runtime = 'tab:blue'
-    ax1.set_xlabel('Total Computational Resources (Total Cores)')
-    ax1.set_ylabel('Runtime (seconds)', color=color_runtime, fontsize=12)
-    line1 = ax1.plot(df["total_cores"], df["runtime"], marker='o', color=color_runtime, label='Runtime (s)')
-    ax1.tick_params(axis='y', labelcolor=color_runtime)
-    ax1.grid(True, linestyle='--', alpha=0.7)
+        with open(file_path, 'r') as f:
+            content = f.read()
+            # We search the whole content to handle multiline or out-of-order logs
+            for key, pattern in patterns.items():
+                match = re.search(pattern, content)
+                if match:
+                    file_data[key] = match.group(1)
+        
+        data_rows.append(file_data)
 
-    # --- Plot Performance (Right Axis) ---
-    ax2 = ax1.twinx()  
-    color_perf = 'tab:red'
-    ax2.set_ylabel('Performance (MLUPS)', color=color_perf, fontsize=12)
-    line2 = ax2.plot(df["total_cores"], df["performance"], marker='s', color=color_perf, label='Performance (MLUPS)')
-    ax2.tick_params(axis='y', labelcolor=color_perf)
-
-    # --- Formatting ---
-    plt.title('Milestone 06: Scaling Analysis\n(Runtime vs. Performance)', fontsize=14)
+    # Write to CSV
+    headers = ["Filename"] + list(patterns.keys())
     
-    # Combined legend
-    lns = line1 + line2
-    labs = [l.get_label() for l in lns]
-    ax1.legend(lns, labs, loc='upper center')
-
-    # Add text annotations for Ranks/Nodes at data points
-    for i, row in df.iterrows():
-        ax1.annotate(f'R:{int(row["ranks"])}', 
-                     (row["total_cores"], row["runtime"]),
-                     textcoords="offset points", xytext=(0,10), ha='center', fontsize=8)
-
-    fig.tight_layout()
-    plt.savefig('scaling_performance.png', dpi=300)
-    print("Figure saved as scaling_performance.png")
+    try:
+        with open(output_csv, 'w', newline='') as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=headers)
+            writer.writeheader()
+            writer.writerows(data_rows)
+        print(f"Successfully saved data to {output_csv}")
+    except IOError as e:
+        print(f"Error writing CSV: {e}")
 
 if __name__ == "__main__":
-    # 1. Extract Data
-    results_df = parse_slurm_files()
+    # Configuration: Change '.' to your directory path if needed
+    TARGET_DIRECTORY = "." 
+    OUTPUT_FILE = "slurm_summary.csv"
     
-    if not results_df.empty:
-        # 2. Save to CSV
-        csv_name = "scaling_results.csv"
-        results_df.to_csv(csv_name, index=False)
-        print(f"Data exported to {csv_name}")
-        
-        # 3. Print summary to console
-        print("\nParsed Data Summary:")
-        print(results_df[["nodes", "total_cores", "ranks", "runtime", "performance"]])
-        
-        # 4. Generate Figures
-        generate_plots(results_df)
-    else:
-        print("No valid slurm-xxx.out files found in the current directory.")
+    parse_slurm_files(TARGET_DIRECTORY, OUTPUT_FILE)

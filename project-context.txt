@@ -1,14 +1,20 @@
 # Project context : /home/woyte/Studium/repos/hochleistungsrechnen
-# Files included  : 27
+# Files included  : 36
 #
 # Index:
 #   CMakeLists.txt
 #   README.md
 #   LICENSE
+#   scaling-results.csv
 #   .gitignore
 #   centerline_profile.csv
 #   viscosity.csv
 #   velocity_profile.csv
+#   performance_benchmarks/parse_slurm.py
+#   performance_benchmarks/slurm_summary.csv
+#   performance_benchmarks/schedule-jobs.sh
+#   performance_benchmarks/visualize_slurm.py
+#   performance_benchmarks/scaling_results.csv
 #   serial/CMakeLists.txt
 #   serial/main.cpp
 #   .github/workflows/cmake.yml
@@ -29,6 +35,9 @@
 #   project/main.cpp
 #   project_video_export/CMakeLists.txt
 #   project_video_export/main.cpp
+#   milestone06/CMakeLists.txt
+#   milestone06/graph.py
+#   milestone06/main.cpp
 #
 
 ================================================================================
@@ -113,7 +122,6 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(sdl3 sdl3_image sdl3_net)
 
-
 enable_testing()
 add_subdirectory(fluid_simulation)
 add_subdirectory(project)
@@ -121,6 +129,7 @@ add_subdirectory(serial)
 add_subdirectory(project_video_export)
 add_subdirectory(milestone04)
 add_subdirectory(milestone05)
+add_subdirectory(milestone06)
 
 ================================================================================
 FILE: README.md
@@ -334,6 +343,23 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+================================================================================
+FILE: scaling-results.csv
+================================================================================
+ranks;runtime_s;performance_mlups
+1;43.0904;23.207
+2;21.5256;46.4564
+4;11.5014;86.9456
+5;9.80591;101.979
+8;6.35969;157.24
+10;6.21572;160.882
+20;7.17903;139.295
+25;7.71452;129.626
+40;11.6942;85.5128
+50;13.8975;71.9555
+100;18.9978;52.6377
+125;19.1994;52.085
 
 ================================================================================
 FILE: .gitignore
@@ -1740,6 +1766,281 @@ y,t,ux
 99,4000,-0.000225864
 
 ================================================================================
+FILE: performance_benchmarks/parse_slurm.py
+================================================================================
+import re
+import csv
+import glob
+import os
+
+def parse_slurm_files(directory_path, output_csv):
+    # Define the regex patterns for each field
+    patterns = {
+        "Total Mass": r"Total mass:\s+([\d.e+-]+)",
+        "Kinetic Energy": r"Total kinetic energy:\s+([\d.]+)",
+        "Runtime (s)": r"Runtime:\s+([\d.]+)\s+s",
+        "Performance (MLUPS)": r"Performance:\s+([\d.]+)\s+MLUPS",
+        "Real Time": r"real\s+(\d+m[\d.]+s)",
+        "User Time": r"user\s+(\d+m[\d.]+s)",
+        "Sys Time": r"sys\s+(\d+m[\d.]+s)",
+        "Nodes": r"Nodes:\s+(\d+)",
+        "Cores per node": r"Cores per node:\s+(\d+)",
+        "CPU Utilized": r"CPU Utilized:\s+([\d:]+)",
+        "CPU Efficiency": r"CPU Efficiency:\s+([\d.]+% of [\d:]+ core-walltime)",
+        "Wall-clock time": r"Job Wall-clock time:\s+([\d:]+)",
+        "State": r"State:\s+(.*)"
+    }
+
+    # Prepare the list to hold all extracted data
+    data_rows = []
+
+    # Find all files matching the pattern
+    files = glob.glob(os.path.join(directory_path, "slurm-*.out"))
+    
+    if not files:
+        print("No files found matching slurm-*.out")
+        return
+
+    print(f"Processing {len(files)} files...")
+
+    for file_path in files:
+        # Initialize a dictionary for this file with None values
+        file_data = {key: None for key in patterns.keys()}
+        file_data["Filename"] = os.path.basename(file_path)
+
+        with open(file_path, 'r') as f:
+            content = f.read()
+            # We search the whole content to handle multiline or out-of-order logs
+            for key, pattern in patterns.items():
+                match = re.search(pattern, content)
+                if match:
+                    file_data[key] = match.group(1)
+        
+        data_rows.append(file_data)
+
+    # Write to CSV
+    headers = ["Filename"] + list(patterns.keys())
+    
+    try:
+        with open(output_csv, 'w', newline='') as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=headers)
+            writer.writeheader()
+            writer.writerows(data_rows)
+        print(f"Successfully saved data to {output_csv}")
+    except IOError as e:
+        print(f"Error writing CSV: {e}")
+
+if __name__ == "__main__":
+    # Configuration: Change '.' to your directory path if needed
+    TARGET_DIRECTORY = "." 
+    OUTPUT_FILE = "slurm_summary.csv"
+    
+    parse_slurm_files(TARGET_DIRECTORY, OUTPUT_FILE)
+
+================================================================================
+FILE: performance_benchmarks/slurm_summary.csv
+================================================================================
+Filename,Total Mass,Kinetic Energy,Runtime (s),Performance (MLUPS),Real Time,User Time,Sys Time,Nodes,Cores per node,CPU Utilized,CPU Efficiency,Wall-clock time,State
+slurm-5393733.out,1.03142e+06,489.394,4.69827,212.844,0m7.804s,0m22.884s,0m2.161s,2,8,00:00:25,5.58% of 00:07:28 core-walltime,00:00:28,COMPLETED (exit code 0)
+slurm-5393724.out,1.03142e+06,489.394,10.2559,97.5053,0m12.347s,0m45.238s,0m1.799s,1,8,00:00:47,18.95% of 00:04:08 core-walltime,00:00:31,COMPLETED (exit code 0)
+slurm-5393726.out,1.03142e+06,489.394,5.99264,166.871,0m8.283s,0m53.730s,0m5.350s,1,16,00:00:59,14.18% of 00:06:56 core-walltime,00:00:26,COMPLETED (exit code 0)
+slurm-5393736.out,,,,,0m14.318s,0m53.840s,1m54.628s,2,40,00:02:49,6.40% of 00:44:00 core-walltime,00:00:33,OUT_OF_MEMORY (exit code 0)
+slurm-5393734.out,1.03142e+06,489.394,3.67259,272.288,0m5.979s,0m20.758s,0m3.253s,2,10,00:00:24,4.80% of 00:08:20 core-walltime,00:00:25,COMPLETED (exit code 0)
+slurm-5393742.out,1.03142e+06,489.394,0.391823,2552.17,0m3.721s,0m29.321s,0m10.760s,4,50,00:00:40,0.83% of 01:20:00 core-walltime,00:00:24,COMPLETED (exit code 0)
+slurm-5393738.out,1.03142e+06,489.394,7.84324,127.498,0m10.553s,0m8.948s,0m0.439s,4,2,00:00:09,3.63% of 00:04:08 core-walltime,00:00:31,COMPLETED (exit code 0)
+slurm-5393735.out,1.03142e+06,489.394,1.90706,524.368,0m5.215s,0m25.688s,0m6.225s,2,20,00:00:32,3.33% of 00:16:00 core-walltime,00:00:24,COMPLETED (exit code 0)
+slurm-5393731.out,1.03142e+06,489.394,14.1982,70.4314,0m17.463s,0m15.675s,0m0.535s,2,2,00:00:16,11.11% of 00:02:24 core-walltime,00:00:36,COMPLETED (exit code 0)
+slurm-5393722.out,1.03142e+06,489.394,30.5899,32.6905,0m35.040s,0m34.173s,0m0.317s,1,2,00:00:35,33.02% of 00:01:46 core-walltime,00:00:53,COMPLETED (exit code 0)
+slurm-5393723.out,1.03142e+06,489.394,17.5528,56.9708,0m20.604s,0m38.910s,0m0.861s,1,4,00:00:40,25.64% of 00:02:36 core-walltime,00:00:39,COMPLETED (exit code 0)
+slurm-5393725.out,1.03142e+06,489.394,8.37587,119.391,0m10.822s,0m46.594s,0m2.684s,1,10,00:00:49,17.50% of 00:04:40 core-walltime,00:00:28,COMPLETED (exit code 0)
+slurm-5393739.out,1.03142e+06,489.394,4.67733,213.797,0m7.155s,0m10.630s,0m1.099s,4,4,00:00:12,2.68% of 00:07:28 core-walltime,00:00:28,COMPLETED (exit code 0)
+slurm-5393728.out,1.03142e+06,489.394,2.30402,434.024,0m4.437s,0m52.694s,0m9.289s,1,40,00:01:02,7.05% of 00:14:40 core-walltime,00:00:22,COMPLETED (exit code 0)
+slurm-5393744.out,1.03142e+06,489.394,1.5147,660.197,0m4.693s,0m11.858s,0m5.542s,8,10,00:00:18,0.90% of 00:33:20 core-walltime,00:00:25,COMPLETED (exit code 0)
+slurm-5393740.out,1.03142e+06,489.394,1.79925,555.787,0m5.213s,0m11.353s,0m4.251s,4,10,00:00:16,1.67% of 00:16:00 core-walltime,00:00:24,COMPLETED (exit code 0)
+slurm-5393730.out,,,,,0m38.347s,0m39.577s,19m31.612s,1,80,00:22:26,29.52% of 01:16:00 core-walltime,00:00:57,OUT_OF_MEMORY (exit code 0)
+slurm-5393743.out,1.03142e+06,489.394,3.5196,284.123,0m6.230s,0m3.993s,0m0.614s,8,2,00:00:05,1.25% of 00:06:40 core-walltime,00:00:25,COMPLETED (exit code 0)
+slurm-5393741.out,1.03142e+06,489.394,0.811031,1233,0m4.299s,0m13.857s,0m9.703s,4,20,00:00:24,1.30% of 00:30:40 core-walltime,00:00:23,COMPLETED (exit code 0)
+slurm-5393727.out,1.03142e+06,489.394,4.30543,232.265,0m6.525s,0m48.769s,0m4.400s,1,20,00:00:53,11.04% of 00:08:00 core-walltime,00:00:24,COMPLETED (exit code 0)
+slurm-5393732.out,1.03142e+06,489.394,8.00945,124.852,0m10.007s,0m17.720s,0m0.890s,2,4,00:00:19,7.92% of 00:04:00 core-walltime,00:00:30,COMPLETED (exit code 0)
+slurm-5393729.out,1.03142e+06,489.394,1.58425,631.215,0m3.536s,0m46.547s,0m11.630s,1,50,00:00:58,5.52% of 00:17:30 core-walltime,00:00:21,COMPLETED (exit code 0)
+slurm-5393737.out,,,,,0m15.059s,4m51.420s,0m11.189s,2,50,00:05:03,8.91% of 00:56:40 core-walltime,00:00:34,FAILED (exit code 137)
+slurm-5393745.out,1.03142e+06,489.394,0.182668,5474.4,0m3.600s,0m23.350s,0m10.751s,8,50,00:00:34,0.35% of 02:40:00 core-walltime,00:00:24,COMPLETED (exit code 0)
+
+================================================================================
+FILE: performance_benchmarks/schedule-jobs.sh
+================================================================================
+#!/usr/bin/env bash
+
+# 1. Define your specific allowed rank counts
+ALLOWED_RANKS=(1 2 4 5 8 10 20 25 40 50 100 125 200 250 500 1000)
+
+# 2. Define the node counts you want to test (e.g., power of 2 scaling)
+NODE_TESTS=(1 2 4 8)
+
+# 3. Define the physical cores per node (from your previous log: 20)
+# We will allow a bit of oversubscription (e.g., up to 2x) for testing purposes
+MAX_TASKS_PER_NODE=40 
+
+echo "Starting Scaling Benchmark Scheduler..."
+echo "----------------------------------------"
+
+for nodes in "${NODE_TESTS[@]}"; do
+    for total_ranks in "${ALLOWED_RANKS[@]}"; do
+        
+        # RULE 1: Total ranks must be at least equal to number of nodes
+        # (To ensure we are actually using all allocated nodes)
+        if [ "$total_ranks" -lt "$nodes" ]; then
+            continue
+        fi
+
+        # RULE 2: Balanced distribution 
+        # total_ranks must be evenly divisible by node count
+        if (( total_ranks % nodes == 0 )); then
+            tasks_per_node=$(( total_ranks / nodes ))
+
+            # RULE 3: Hardware Limit
+            # Don't schedule if tasks per node exceed our oversubscription limit
+            if [ "$tasks_per_node" -le "$MAX_TASKS_PER_NODE" ]; then
+                
+                JOB_NAME="M06-N${nodes}-R${total_ranks}"
+                
+                echo "Submitting: $total_ranks ranks across $nodes nodes ($tasks_per_node tasks/node)"
+                
+                # We override ntasks-per-node and nodes on the command line
+                # This ignores the defaults set inside run.job
+                sbatch --nodes="$nodes" \
+                       --ntasks-per-node="$tasks_per_node" \
+                       --job-name="$JOB_NAME" \
+                       run.job
+            fi
+        fi
+    done
+done
+
+echo "----------------------------------------"
+echo "All valid jobs submitted. Check progress with 'squeue -u $USER'"
+
+================================================================================
+FILE: performance_benchmarks/visualize_slurm.py
+================================================================================
+import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib.lines as mlines
+import os
+
+def generate_total_cores_plot(csv_file):
+    if not os.path.exists(csv_file):
+        print(f"Error: {csv_file} not found.")
+        return
+
+    # 1. Load and Prepare Data
+    df = pd.read_csv(csv_file)
+    df['Nodes'] = pd.to_numeric(df['Nodes'])
+    df['Cores per node'] = pd.to_numeric(df['Cores per node'])
+    df['Runtime (s)'] = pd.to_numeric(df['Runtime (s)'])
+    df['Performance (MLUPS)'] = pd.to_numeric(df['Performance (MLUPS)'])
+    
+    # Calculate Total Cores (the requested X-axis)
+    df['Total Cores'] = df['Nodes'] * df['Cores per node']
+    
+    # Sort by total cores to ensure lines connect points in order
+    df = df.sort_values('Total Cores')
+
+    # 2. Setup Plot
+    fig, ax1 = plt.subplots(figsize=(12, 7))
+    ax2 = ax1.twinx() # Create the second Y-axis
+
+    # Style definitions
+    # We use a distinct color for each node count
+    unique_nodes = sorted(df['Nodes'].unique())
+    # Use a professional color palette
+    colors = plt.cm.tab10(range(len(unique_nodes))) 
+    
+    node_handles = []
+
+    # 3. Plotting
+    for i, node_count in enumerate(unique_nodes):
+        node_data = df[df['Nodes'] == node_count]
+        color = colors[i]
+        
+        # Plot Runtime on Left Axis (Solid Line)
+        ln1, = ax1.plot(node_data['Total Cores'], node_data['Runtime (s)'], 
+                        marker='o', linestyle='-', color=color, linewidth=2, 
+                        label=f'{node_count} Node(s)')
+        
+        # Plot Performance on Right Axis (Dashed Line)
+        ax2.plot(node_data['Total Cores'], node_data['Performance (MLUPS)'], 
+                 marker='s', linestyle='--', color=color, linewidth=2, alpha=0.7)
+        
+        node_handles.append(ln1)
+
+    # 4. Axes and Grid Styling
+    ax1.set_xlabel('Total Cores (Nodes × Cores per Node)', fontsize=12, fontweight='bold')
+    ax1.set_ylabel('Runtime (s)', color='#1f77b4', fontsize=12, fontweight='bold')
+    ax2.set_ylabel('Performance (MLUPS)', color='#d62728', fontsize=12, fontweight='bold')
+    
+    # Match tick colors to their respective axis colors
+    ax1.tick_params(axis='y', labelcolor='#1f77b4')
+    ax2.tick_params(axis='y', labelcolor='#d62728')
+    
+    ax1.grid(True, linestyle='--', alpha=0.6)
+    
+    plt.title('Fluid Simulation Scaling Analysis\nRuntime and Performance vs. Total Cores Assigned', 
+              pad=20, fontsize=15, fontweight='bold')
+
+    # 5. Complex Legend
+    # First legend: Node Configurations (Colors)
+    legend1 = ax1.legend(handles=node_handles, title="Configurations", 
+                         loc='upper center', bbox_to_anchor=(0.5, -0.12), 
+                         ncol=len(unique_nodes), frameon=True, shadow=True)
+    ax1.add_artist(legend1)
+
+    # Second legend: Metric types (Line styles)
+    runtime_line = mlines.Line2D([], [], color='gray', marker='o', linestyle='-', label='Runtime (s)')
+    perf_line = mlines.Line2D([], [], color='gray', marker='s', linestyle='--', label='Performance (MLUPS)')
+    ax2.legend(handles=[runtime_line, perf_line], title="Metrics", 
+               loc='upper right', frameon=True, shadow=True)
+
+    # Adjust layout to fit legends
+    plt.tight_layout()
+    plt.subplots_adjust(bottom=0.2)
+
+    # 6. Save and Show
+    output_fn = "scaling_total_cores.png"
+    plt.savefig(output_fn, dpi=300)
+    print(f"Generated combined plot: {output_fn}")
+    plt.show()
+
+if __name__ == "__main__":
+    generate_total_cores_plot("slurm_summary.csv")
+
+================================================================================
+FILE: performance_benchmarks/scaling_results.csv
+================================================================================
+filename,nodes,ranks,runtime,performance,walltime,cores_per_node,total_cores
+slurm-5393733.out,2,8,4.69827,212.844,00:00:28,0,0
+slurm-5393724.out,1,4,10.2559,97.5053,00:00:31,8,8
+slurm-5393726.out,1,8,5.99264,166.871,00:00:26,16,16
+slurm-5393734.out,2,10,3.67259,272.288,00:00:25,0,0
+slurm-5393742.out,4,100,0.391823,2552.17,00:00:24,0,0
+slurm-5393738.out,4,4,7.84324,127.498,00:00:31,0,0
+slurm-5393735.out,2,20,1.90706,524.368,00:00:24,0,0
+slurm-5393731.out,2,2,14.1982,70.4314,00:00:36,0,0
+slurm-5393722.out,1,1,30.5899,32.6905,00:00:53,2,2
+slurm-5393723.out,1,2,17.5528,56.9708,00:00:39,4,4
+slurm-5393725.out,1,5,8.37587,119.391,00:00:28,10,10
+slurm-5393739.out,4,8,4.67733,213.797,00:00:28,0,0
+slurm-5393728.out,1,20,2.30402,434.024,00:00:22,40,40
+slurm-5393744.out,8,40,1.5147,660.197,00:00:25,0,0
+slurm-5393740.out,4,20,1.79925,555.787,00:00:24,0,0
+slurm-5393743.out,8,8,3.5196,284.123,00:00:25,0,0
+slurm-5393741.out,4,40,0.811031,1233.0,00:00:23,0,0
+slurm-5393727.out,1,10,4.30543,232.265,00:00:24,20,20
+slurm-5393732.out,2,4,8.00945,124.852,00:00:30,0,0
+slurm-5393729.out,1,25,1.58425,631.215,00:00:21,50,50
+slurm-5393745.out,8,200,0.182668,5474.4,00:00:24,0,0
+
+================================================================================
 FILE: serial/CMakeLists.txt
 ================================================================================
 add_executable(serial main.cpp)
@@ -1764,7 +2065,6 @@ FILE: serial/main.cpp
 #include <SDL3/SDL.h>
 
 void serialize(const simulation &sim, const std::string &filename) {
-    // Create host mirrors to copy data from the device (GPU) to the host (CPU)
     auto rho_h = Kokkos::create_mirror_view(sim.rho);
     auto v_h = Kokkos::create_mirror_view(sim.v);
     auto f_h = Kokkos::create_mirror_view(sim.f);
@@ -1780,16 +2080,14 @@ void serialize(const simulation &sim, const std::string &filename) {
         return;
     }
 
-    int Nx = sim.Nx;
-    int Ny = sim.Ny;
+    int Nx = sim.global_Nx;
+    int Ny = sim.global_Ny;
     double omega = sim.omega;
 
-    // Write header (dimensions and parameter)
     out.write(reinterpret_cast<const char *>(&Nx), sizeof(int));
     out.write(reinterpret_cast<const char *>(&Ny), sizeof(int));
     out.write(reinterpret_cast<const char *>(&omega), sizeof(double));
 
-    // Write raw view data
     out.write(reinterpret_cast<const char *>(rho_h.data()),
               rho_h.size() * sizeof(double));
     out.write(reinterpret_cast<const char *>(v_h.data()),
@@ -1811,26 +2109,21 @@ void deserialize(simulation &sim, const std::string &filename) {
     int Nx, Ny;
     double omega;
 
-    // Read header
     in.read(reinterpret_cast<char *>(&Nx), sizeof(int));
     in.read(reinterpret_cast<char *>(&Ny), sizeof(int));
     in.read(reinterpret_cast<char *>(&omega), sizeof(double));
 
-    // Initialize the simulation with the loaded dimensions and omega
-    // This allocates the necessary Kokkos views (including f_next)
     sim = simulation(Nx, Ny, omega);
 
     auto rho_h = Kokkos::create_mirror_view(sim.rho);
     auto v_h = Kokkos::create_mirror_view(sim.v);
     auto f_h = Kokkos::create_mirror_view(sim.f);
 
-    // Read raw view data
     in.read(reinterpret_cast<char *>(rho_h.data()),
             rho_h.size() * sizeof(double));
     in.read(reinterpret_cast<char *>(v_h.data()), v_h.size() * sizeof(double));
     in.read(reinterpret_cast<char *>(f_h.data()), f_h.size() * sizeof(double));
 
-    // Copy data from host back to the device
     Kokkos::deep_copy(sim.rho, rho_h);
     Kokkos::deep_copy(sim.v, v_h);
     Kokkos::deep_copy(sim.f, f_h);
@@ -1850,12 +2143,10 @@ int main(int argc, char *argv[]) {
     {
         if (argc < 3) {
             if (rank == 0) {
-                std::cout << "Usage: ./project_serial <save|load> <filename> "
+                std::cout << "Usage: ./serial <save|load> <filename> "
                              "[steps_for_save]\n";
-                std::cout << "Example save: ./project_serial save "
-                             "sim_state.bin 100\n";
-                std::cout
-                    << "Example load: ./project_serial load sim_state.bin\n";
+                std::cout << "Example save: ./serial save sim_state.bin 100\n";
+                std::cout << "Example load: ./serial load sim_state.bin\n";
             }
         } else {
             std::string mode = argv[1];
@@ -1868,7 +2159,7 @@ int main(int argc, char *argv[]) {
 
                 uint Nx = 150 * 4;
                 uint Ny = 100 * 4;
-                simulation sim{Nx, Ny, 1.0};
+                simulation sim{static_cast<int>(Nx), static_cast<int>(Ny), 1.0};
 
                 size_t steps = 100;
                 if (argc > 3)
@@ -1888,14 +2179,12 @@ int main(int argc, char *argv[]) {
                 simulation sim;
                 deserialize(sim, filename);
 
-                int Nx = sim.Nx;
-                int Ny = sim.Ny;
+                int Nx = sim.global_Nx;
+                int Ny = sim.global_Ny;
 
-                // SDL3 SETUP (Only on Rank 0)
                 SDL_Window *window = nullptr;
                 SDL_Renderer *renderer = nullptr;
                 SDL_Texture *texture = nullptr;
-                std::vector<uint32_t> pixels(Nx * Ny);
 
                 if (rank == 0) {
                     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
@@ -1915,39 +2204,18 @@ int main(int argc, char *argv[]) {
                     }
                 }
 
-                auto v_host = Kokkos::create_mirror_view(sim.v);
                 bool quit = false;
 
                 while (!quit) {
-                    sim.step(10); // Continue simulation from deserialized state
+                    sim.step(10);
+
+                    auto pixels = sim.get_global_rgb_speed();
 
                     if (rank == 0) {
                         SDL_Event e;
                         while (SDL_PollEvent(&e)) {
-                            if (e.type == SDL_EVENT_QUIT) {
+                            if (e.type == SDL_EVENT_QUIT)
                                 quit = true;
-                            }
-                        }
-
-                        Kokkos::deep_copy(v_host, sim.v);
-
-                        for (int y = 0; y < Ny; ++y) {
-                            for (int x = 0; x < Nx; ++x) {
-                                double vx = v_host(x, y, 0);
-                                double vy = v_host(x, y, 1);
-                                double speed = std::sqrt(vx * vx + vy * vy);
-                                double intensity = std::min(speed / 0.1, 1.0);
-
-                                uint8_t r =
-                                    static_cast<uint8_t>(intensity * 255);
-                                uint8_t g = 0;
-                                uint8_t b = static_cast<uint8_t>(
-                                    (1.0 - intensity) * 255);
-                                uint8_t a = 255;
-
-                                pixels[y * Nx + x] =
-                                    (r << 24) | (g << 16) | (b << 8) | a;
-                            }
                         }
 
                         if (texture && renderer) {
@@ -1960,7 +2228,6 @@ int main(int argc, char *argv[]) {
                         }
                     }
 
-                    // Sync the "quit" state to all other MPI processes
                     int quit_int = quit ? 1 : 0;
                     MPI_Bcast(&quit_int, 1, MPI_INT, 0, MPI_COMM_WORLD);
                     quit = (quit_int == 1);
@@ -2034,53 +2301,39 @@ target_link_libraries(fluid_simulation PRIVATE MPI::MPI_CXX Eigen3::Eigen Kokkos
 FILE: fluid_simulation/src/field.cpp
 ================================================================================
 #include "field.h"
-#include <Kokkos_Core.hpp>
-#include <cmath>
 
-void initialize_lbm(int Nx, int Ny, ScalarField2D &rho, VectorField2D &v,
-                    DistFuncD2Q9 &f, DistFuncD2Q9 &f_next,
-                    InitialisationPattern pattern) {
-    // 1. Density: size (Nx, Ny)
-    rho = ScalarField2D("density", Nx, Ny);
-
-    // 2. Velocity: size (Nx, Ny, 2)
-    v = VectorField2D("velocity", Nx, Ny);
-
-    // 3. Distribution function: size (Nx, Ny, 9)
-    f = DistFuncD2Q9("distribution_function", Nx, Ny);
-
-    // 4. Second view for the distribution function to store the updated values
-    f_next = DistFuncD2Q9("distribution_function_next", Nx, Ny);
-
-    // Initialise the Views inside a Kokkos parallel execution:
+void initialize_lbm(int Nx, int global_Ny, int local_Ny, int offset_y,
+                    ScalarField2D &rho, VectorField2D &v, DistFuncD2Q9 &f,
+                    DistFuncD2Q9 &f_next, InitialisationPattern pattern) {
+    // 1. Density: size (Nx, local_Ny + 2 for ghosts)
+    rho = ScalarField2D("density", Nx, local_Ny + 2);
+    // 2. Velocity
+    v = VectorField2D("velocity", Nx, local_Ny + 2);
+    // 3. Distribution function
+    f = DistFuncD2Q9("distribution_function", Nx, local_Ny + 2);
+    f_next = DistFuncD2Q9("distribution_function_next", Nx, local_Ny + 2);
 
     if (pattern == InitialisationPattern::Empty)
         Kokkos::parallel_for(
             "InitFields",
-            Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {Nx, Ny}),
+            Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {Nx, local_Ny + 2}),
             KOKKOS_LAMBDA(const int x, const int y) {
                 const double w[9] = {4. / 9.,  1. / 9.,  1. / 9.,
                                      1. / 9.,  1. / 9.,  1. / 36.,
                                      1. / 36., 1. / 36., 1. / 36.};
-                // Initialize density to 1.0
                 rho(x, y) = 1.0;
+                v(x, y, 0) = 0.0;
+                v(x, y, 1) = 0.0;
 
-                // Initialize velocity components to 0.0
-                v(x, y, 0) = 0.0; // u_x
-                v(x, y, 1) = 0.0; // u_y
-
-                for (int i = 0; i < 9; ++i) {
+                for (int i = 0; i < 9; ++i)
                     f(x, y, i) = w[i];
-                }
             });
 
-    // Initialise the Views inside a Kokkos parallel execution:
     if (pattern == InitialisationPattern::Wave)
         Kokkos::parallel_for(
             "InitFieldsWave",
-            Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {Nx, Ny}),
+            Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {Nx, local_Ny + 2}),
             KOKKOS_LAMBDA(const int x, const int y) {
-                // D2Q9 Parameters
                 const double w[9] = {4. / 9.,  1. / 9.,  1. / 9.,
                                      1. / 9.,  1. / 9.,  1. / 36.,
                                      1. / 36., 1. / 36., 1. / 36.};
@@ -2100,12 +2353,13 @@ void initialize_lbm(int Nx, int Ny, ScalarField2D &rho, VectorField2D &v,
                 // stability)
                 const double amp = 0.05;
 
+                int global_y = y + offset_y - 1;
                 // Define the sinusoidal macroscopic fields
                 // The wave travels along the X-axis. Y-velocity remains 0.
                 double current_rho = 1.0 + amp * Kokkos::sin(k * x);
                 double vx = amp * Kokkos::sin(k * x);
                 // double vy = 0;
-                double vy = amp * Kokkos::cos(k * y) / 2;
+                double vy = amp * Kokkos::cos(k * global_y) / 2;
 
                 // Store macroscopic variables
                 rho(x, y) = current_rho;
@@ -2114,7 +2368,6 @@ void initialize_lbm(int Nx, int Ny, ScalarField2D &rho, VectorField2D &v,
 
                 // Initialize the distribution function to the equilibrium
                 double u_sq = vx * vx + vy * vy;
-
                 for (int i = 0; i < 9; ++i) {
                     double cu = cx[i] * vx + cy[i] * vy;
 
@@ -2124,10 +2377,11 @@ void initialize_lbm(int Nx, int Ny, ScalarField2D &rho, VectorField2D &v,
                                  (1.0 + 3.0 * cu + 4.5 * cu * cu - 1.5 * u_sq);
                 }
             });
+
     if (pattern == InitialisationPattern::Point)
         Kokkos::parallel_for(
             "InitFieldsSimple",
-            Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {Nx, Ny}),
+            Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {Nx, local_Ny + 2}),
             KOKKOS_LAMBDA(const int x, const int y) {
                 rho(x, y) = 0.0;
                 v(x, y, 0) = 0.0;
@@ -2136,20 +2390,21 @@ void initialize_lbm(int Nx, int Ny, ScalarField2D &rho, VectorField2D &v,
                 // Set all directions to 0 initially
                 for (int i = 0; i < 9; ++i) {
                     f(x, y, i) = 0.0;
-                }
 
-                // Place a single cluster of particles in the middle of the
-                // grid, moving exclusively to the right (direction index 1,
-                // where cx = 1, cy = 0)
-                if (x == Nx / 2 && y == Ny / 2) {
-                    f(x, y, 1) = 1.0;
+                    int global_y = y + offset_y - 1;
+                    // Place a single cluster of particles in the middle of the
+                    // grid, moving exclusively to the right (direction index 1,
+                    // where cx = 1, cy = 0)
+                    if (x == Nx / 2 && global_y == global_Ny / 2) {
+                        f(x, y, 1) = 1.0;
+                    }
                 }
             });
 
     if (pattern == InitialisationPattern::Droplet)
         Kokkos::parallel_for(
             "InitFieldsDroplet",
-            Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {Nx, Ny}),
+            Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {Nx, local_Ny + 2}),
             KOKKOS_LAMBDA(const int x, const int y) {
                 // D2Q9 Parameters
                 const double w[9] = {4. / 9.,  1. / 9.,  1. / 9.,
@@ -2162,17 +2417,18 @@ void initialize_lbm(int Nx, int Ny, ScalarField2D &rho, VectorField2D &v,
 
                 // Droplet properties
                 const double center_x = Nx / 2.0;
-                const double center_y = Ny / 2.0;
+                const double center_y = global_Ny / 2.0;
                 const double radius =
                     Nx / 10.0;          // Controls the size of the droplet
                 const double amp = 0.5; // Amplitude of the density bump
 
+                int global_y = y + offset_y - 1;
                 double dx = x - center_x;
-                double dy = y - center_y;
+                double dy = global_y - center_y;
                 double dist_sq = dx * dx + dy * dy;
 
-                // Gaussian bump for density: creates a smooth "droplet" of high
-                // density
+                // Gaussian bump for density: creates a smooth "droplet"
+                // of high density
                 double current_rho =
                     1.0 + amp * Kokkos::exp(-dist_sq / (2.0 * radius * radius));
 
@@ -2185,7 +2441,8 @@ void initialize_lbm(int Nx, int Ny, ScalarField2D &rho, VectorField2D &v,
                 v(x, y, 0) = vx;
                 v(x, y, 1) = vy;
 
-                // Initialize the distribution function to the equilibrium
+                // Initialize the distribution function to the
+                // equilibrium
                 double u_sq = vx * vx + vy * vy;
 
                 for (int i = 0; i < 9; ++i) {
@@ -2198,7 +2455,7 @@ void initialize_lbm(int Nx, int Ny, ScalarField2D &rho, VectorField2D &v,
     if (pattern == InitialisationPattern::ShearWave)
         Kokkos::parallel_for(
             "InitFieldsShearWave",
-            Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {Nx, Ny}),
+            Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {Nx, local_Ny + 2}),
             KOKKOS_LAMBDA(const int x, const int y) {
                 const double w[9] = {4. / 9.,  1. / 9.,  1. / 9.,
                                      1. / 9.,  1. / 9.,  1. / 36.,
@@ -2212,8 +2469,11 @@ void initialize_lbm(int Nx, int Ny, ScalarField2D &rho, VectorField2D &v,
                 const double epsilon = 0.05;
                 const double current_rho = 1.0;
 
-                // Sinusoidal variation of the velocities ux with the position y
-                double vx = epsilon * Kokkos::sin(2.0 * PI * y / Ny);
+                // Sinusoidal variation of the velocities ux with the
+                // position y
+                int global_y = y + offset_y - 1;
+                double vx =
+                    epsilon * Kokkos::sin(2.0 * PI * global_y / global_Ny);
                 double vy = 0.0;
 
                 rho(x, y) = current_rho;
@@ -2230,19 +2490,15 @@ void initialize_lbm(int Nx, int Ny, ScalarField2D &rho, VectorField2D &v,
             });
 }
 
-void compute_velocity(ScalarField2D rho, VectorField2D v, DistFuncD2Q9 f) {
-    // Extract grid dimensions directly from the View extents
+void compute_velocity(ScalarField2D rho, VectorField2D v, DistFuncD2Q9 f,
+                      int local_Ny) {
     const int Nx = rho.extent(0);
-    const int Ny = rho.extent(1);
 
-    // Launch a 2D parallel loop over all spatial nodes (x, y)
     Kokkos::parallel_for(
         "ComputeMacroscopicFields",
-        Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {Nx, Ny}),
+        Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 1}, {Nx, local_Ny + 1}),
         KOKKOS_LAMBDA(const int x, const int y) {
             // Standard D2Q9 discrete velocity components
-            // Note: Storing them inside the lambda ensures they are available
-            // on the GPU device
             const double cx[9] = {0.0, 1.0,  0.0,  -1.0, 0.0,
                                   1.0, -1.0, -1.0, 1.0};
             const double cy[9] = {0.0, 0.0, 1.0,  0.0, -1.0,
@@ -2255,7 +2511,6 @@ void compute_velocity(ScalarField2D rho, VectorField2D v, DistFuncD2Q9 f) {
             // Compute the integrals (as discrete sums)
             for (int i = 0; i < 9; ++i) {
                 double f_i = f(x, y, i);
-
                 local_rho += f_i;
                 local_vx += f_i * cx[i];
                 local_vy += f_i * cy[i];
@@ -2270,58 +2525,59 @@ void compute_velocity(ScalarField2D rho, VectorField2D v, DistFuncD2Q9 f) {
         });
 }
 
-void streaming(DistFuncD2Q9 f_in, DistFuncD2Q9 f_out, bool bounce,
-               double u_lid) {
-    // Extract grid dimensions from the View
+void streaming(DistFuncD2Q9 f_in, DistFuncD2Q9 f_out, bool bounce, double u_lid,
+               int offset_y, int global_Ny) {
     const int Nx = f_out.extent(0);
-    const int Ny = f_out.extent(1);
+    const int local_Ny = f_out.extent(1) - 2;
 
-    // 2D parallel loop over all spatial nodes (x, y)
     Kokkos::parallel_for(
         "StreamingStep",
-        Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {Nx, Ny}),
+        Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 1}, {Nx, local_Ny + 1}),
         KOKKOS_LAMBDA(const int x, const int y) {
-            // Standard D2Q9 discrete velocity components (integers for grid
-            // indexing)
+            // Standard D2Q9 discrete velocity components (integers for
+            // grid indexing)
             const int cx[9] = {0, 1, 0, -1, 0, 1, -1, -1, 1};
             const int cy[9] = {0, 0, 1, 0, -1, 1, 1, -1, -1};
-            if (!bounce)
+
+            if (!bounce) {
                 for (int i = 0; i < 9; ++i) {
-                    // Determine the coordinates of the neighboring node to
-                    // "pull" from. We subtract cx[i] and cy[i] because we are
-                    // looking BACKWARDS to the source node that sent the
-                    // particle towards (x, y).
+                    // Determine the coordinates of the neighboring node
+                    // to "pull" from. We subtract cx[i] and cy[i]
+                    // because we are looking BACKWARDS to the source
+                    // node that sent the particle towards (x, y).
 
-                    // Adding Nx and Ny before the modulo operator ensures that
-                    // the dividend is positive, properly handling wrap-around
-                    // for periodic boundary conditions on the left/bottom
-                    // edges.
+                    // Adding Nx and Ny before the modulo operator
+                    // ensures that the dividend is positive, properly
+                    // handling wrap-around for periodic boundary
+                    // conditions on the left/bottom edges.
                     int src_x = (x - cx[i] + Nx) % Nx;
-                    int src_y = (y - cy[i] + Ny) % Ny;
-
-                    // Copy the distribution function from the source node
+                    int src_y = y - cy[i];
+                    // Copy the distribution function from the source
+                    // node
                     f_out(x, y, i) = f_in(src_x, src_y, i);
                 }
-
-            if (bounce) {
+            } else {
                 const double w[9] = {4. / 9.,  1. / 9.,  1. / 9.,
                                      1. / 9.,  1. / 9.,  1. / 36.,
                                      1. / 36., 1. / 36., 1. / 36.};
                 const int opp[9] = {0, 3, 4, 1, 2, 7, 8, 5, 6};
 
                 for (int i = 0; i < 9; ++i) {
-                    // Determine the coordinates of the neighboring node to
-                    // "pull" from.
+                    // Determine the coordinates of the neighboring node
+                    // to "pull" from.
                     int src_x = x - cx[i];
                     int src_y = y - cy[i];
 
-                    // Check if the source node is outside the domain (i.e.,
-                    // hitting a wall)
-                    if (src_x < 0 || src_x >= Nx || src_y < 0 || src_y >= Ny) {
-                        // Bounce-back: reflect the distribution function from
-                        // the wall
+                    // Check if the source node is outside the domain
+                    // (i.e., hitting a wall)
+                    int global_src_y = src_y + offset_y - 1;
+
+                    if (src_x < 0 || src_x >= Nx || global_src_y < 0 ||
+                        global_src_y >= global_Ny) {
+                        // Bounce-back: reflect the distribution
+                        // function from the wall
                         f_out(x, y, i) = f_in(x, y, opp[i]);
-                        if (src_y >= Ny) {
+                        if (global_src_y >= global_Ny) {
                             f_out(x, y, i) += 6.0 * w[i] * cx[i] * u_lid;
                         }
                     } else {
@@ -2333,12 +2589,81 @@ void streaming(DistFuncD2Q9 f_in, DistFuncD2Q9 f_out, bool bounce,
         });
 }
 
-void collide(DistFuncD2Q9 f, ScalarField2D rho, VectorField2D v, double omega) {
+void halo_exchange(DistFuncD2Q9 f, int local_Ny, int rank, int size,
+                   bool bounce, HaloBuf send_top, HaloBuf recv_top,
+                   HaloBuf send_bottom, HaloBuf recv_bottom,
+                   HaloBufHost h_send_top, HaloBufHost h_recv_top,
+                   HaloBufHost h_send_bottom, HaloBufHost h_recv_bottom) {
+    int Nx = f.extent(0);
+
+    // Pack directional distributions heading towards neighbors
+    Kokkos::parallel_for(
+        "pack_top", Nx, KOKKOS_LAMBDA(int x) {
+            send_top(x, 0) = f(x, local_Ny, 2);
+            send_top(x, 1) = f(x, local_Ny, 5);
+            send_top(x, 2) = f(x, local_Ny, 6);
+        });
+    Kokkos::parallel_for(
+        "pack_bottom", Nx, KOKKOS_LAMBDA(int x) {
+            send_bottom(x, 0) = f(x, 1, 4);
+            send_bottom(x, 1) = f(x, 1, 7);
+            send_bottom(x, 2) = f(x, 1, 8);
+        });
+    Kokkos::fence();
+
+    Kokkos::deep_copy(h_send_top, send_top);
+    Kokkos::deep_copy(h_send_bottom, send_bottom);
+
+    int top_neighbor = (rank + 1) % size;
+    int bottom_neighbor = (rank - 1 + size) % size;
+
+    // Non-Periodic boundaries nullify corresponding neighbour
+    // communications
+    if (bounce) {
+        if (rank == 0)
+            bottom_neighbor = MPI_PROC_NULL;
+        if (rank == size - 1)
+            top_neighbor = MPI_PROC_NULL;
+    }
+
+    MPI_Request reqs[4];
+    MPI_Irecv(h_recv_top.data(), Nx * 3, MPI_DOUBLE, top_neighbor, 0,
+              MPI_COMM_WORLD, &reqs[0]);
+    MPI_Irecv(h_recv_bottom.data(), Nx * 3, MPI_DOUBLE, bottom_neighbor, 1,
+              MPI_COMM_WORLD, &reqs[1]);
+    MPI_Isend(h_send_top.data(), Nx * 3, MPI_DOUBLE, top_neighbor, 1,
+              MPI_COMM_WORLD, &reqs[2]);
+    MPI_Isend(h_send_bottom.data(), Nx * 3, MPI_DOUBLE, bottom_neighbor, 0,
+              MPI_COMM_WORLD, &reqs[3]);
+
+    MPI_Waitall(4, reqs, MPI_STATUSES_IGNORE);
+
+    Kokkos::deep_copy(recv_top, h_recv_top);
+    Kokkos::deep_copy(recv_bottom, h_recv_bottom);
+
+    // Unpack data received directly into ghost cells
+    Kokkos::parallel_for(
+        "unpack_top", Nx, KOKKOS_LAMBDA(int x) {
+            f(x, local_Ny + 1, 4) = recv_top(x, 0);
+            f(x, local_Ny + 1, 7) = recv_top(x, 1);
+            f(x, local_Ny + 1, 8) = recv_top(x, 2);
+        });
+    Kokkos::parallel_for(
+        "unpack_bottom", Nx, KOKKOS_LAMBDA(int x) {
+            f(x, 0, 2) = recv_bottom(x, 0);
+            f(x, 0, 5) = recv_bottom(x, 1);
+            f(x, 0, 6) = recv_bottom(x, 2);
+        });
+    Kokkos::fence();
+}
+
+void collide(DistFuncD2Q9 f, ScalarField2D rho, VectorField2D v, double omega,
+             int local_Ny) {
     const int Nx = rho.extent(0);
-    const int Ny = rho.extent(1);
 
     Kokkos::parallel_for(
-        "CollideStep", Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {Nx, Ny}),
+        "CollideStep",
+        Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 1}, {Nx, local_Ny + 1}),
         KOKKOS_LAMBDA(const int x, const int y) {
             const double w[9] = {4. / 9.,  1. / 9.,  1. / 9.,  1. / 9., 1. / 9.,
                                  1. / 36., 1. / 36., 1. / 36., 1. / 36.};
@@ -2355,19 +2680,18 @@ void collide(DistFuncD2Q9 f, ScalarField2D rho, VectorField2D v, double omega) {
 
             for (int i = 0; i < 9; ++i) {
                 double cu = cx[i] * vx + cy[i] * vy;
-                // Equilibrium distribution function (Eq. 6)
                 double f_eq = w[i] * local_rho *
                               (1.0 + 3.0 * cu + 4.5 * cu * cu - 1.5 * u_sq);
-                // Relaxation step (Eq. 3)
                 f(x, y, i) = f(x, y, i) + omega * (f_eq - f(x, y, i));
             }
         });
 }
 
-void velocity_to_speed(int Nx, int Ny, VectorField2D v, ScalarField2D speed) {
+void velocity_to_speed(int Nx, int local_Ny, VectorField2D v,
+                       ScalarField2D speed) {
     Kokkos::parallel_for(
         "compute_the_speed_for_each_velocity",
-        Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {Nx, Ny}),
+        Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 1}, {Nx, local_Ny + 1}),
         KOKKOS_LAMBDA(int x, int y) {
             double vx = v(x, y, 0);
             double vy = v(x, y, 1);
@@ -2375,10 +2699,11 @@ void velocity_to_speed(int Nx, int Ny, VectorField2D v, ScalarField2D speed) {
         });
 }
 
-double get_max_speed(int Nx, int Ny, ScalarField2D speed, double prev_max) {
+double get_max_speed(int Nx, int local_Ny, ScalarField2D speed,
+                     double prev_max) {
     Kokkos::parallel_reduce(
         "Find maximum value",
-        Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {Nx, Ny}),
+        Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 1}, {Nx, local_Ny + 1}),
         KOKKOS_LAMBDA(int x, int y, double &local_max) {
             double s = speed(x, y);
             if (s > local_max)
@@ -2388,57 +2713,48 @@ double get_max_speed(int Nx, int Ny, ScalarField2D speed, double prev_max) {
     return prev_max;
 }
 
-void speed_to_rgb(int Nx, int Ny, ScalarField2D speed, PixelField rgb_speed,
-                  double max_speed) {
-
+void speed_to_rgb(int Nx, int local_Ny, ScalarField2D speed,
+                  PixelField rgb_speed, double max_speed) {
     Kokkos::parallel_for(
         "VelocityToColor",
         Kokkos::MDRangePolicy<Kokkos::Rank<2>>(
-            {0, 0}, {static_cast<int>(Nx), static_cast<int>(Ny)}),
+            {0, 1}, {static_cast<int>(Nx), static_cast<int>(local_Ny + 1)}),
         KOKKOS_LAMBDA(const int x, const int y) {
             double s = speed(x, y);
-            // Use a ternary operator instead of std::min for GPU
-            // compatibility
             double intensity = (s < max_speed) ? (s / max_speed) : 1.0;
 
-            // Heatmap gradient: Blue (slow) to Red (fast)
             uint8_t r = static_cast<uint8_t>(intensity * 255.0);
             uint8_t g = 0;
             uint8_t b = static_cast<uint8_t>((1.0 - intensity) * 255.0);
             uint8_t a = 255;
 
-            // SDL_PIXELFORMAT_RGBA8888 standard bit-shifting
-            rgb_speed(y * Nx + x) = (r << 24) | (g << 16) | (b << 8) | a;
+            rgb_speed((y - 1) * Nx + x) = (r << 24) | (g << 16) | (b << 8) | a;
         });
 }
 
-void velocity_dir_to_rgb(int Nx, int Ny, VectorField2D v, PixelField rgb,
+void velocity_dir_to_rgb(int Nx, int local_Ny, VectorField2D v, PixelField rgb,
                          double max_speed) {
     Kokkos::parallel_for(
         "VelocityDirToColor",
         Kokkos::MDRangePolicy<Kokkos::Rank<2>>(
-            {0, 0}, {static_cast<int>(Nx), static_cast<int>(Ny)}),
+            {0, 1}, {static_cast<int>(Nx), static_cast<int>(local_Ny + 1)}),
         KOKKOS_LAMBDA(const int x, const int y) {
             double vx = v(x, y, 0);
             double vy = v(x, y, 1);
 
-            // V: Value (Brightness) mapped to normalized speed
             double speed = Kokkos::sqrt(vx * vx + vy * vy);
             double val = (max_speed > 0.0) ? (speed / max_speed) : 0.0;
             if (val > 1.0)
-                val = 1.0; // clamp
+                val = 1.0;
 
-            // H: Hue mapped to angle in radians [-pi, pi] -> [0, 360)
             double angle = Kokkos::atan2(vy, vx);
             const double PI = 3.14159265358979323846;
             double hue_deg = (angle + PI) * (180.0 / PI);
             if (hue_deg >= 360.0)
                 hue_deg = 0.0;
 
-            // Standard HSV to RGB conversion (assuming Saturation S = 1.0)
             double h_prime = hue_deg / 60.0;
 
-            // Custom fmod for h_prime % 2 compatibility on device
             double temp = h_prime;
             while (temp >= 2.0)
                 temp -= 2.0;
@@ -2477,7 +2793,7 @@ void velocity_dir_to_rgb(int Nx, int Ny, VectorField2D v, PixelField rgb,
             uint8_t b = static_cast<uint8_t>(b1 * 255.0);
             uint8_t a = 255;
 
-            rgb(y * Nx + x) = (r << 24) | (g << 16) | (b << 8) | a;
+            rgb((y - 1) * Nx + x) = (r << 24) | (g << 16) | (b << 8) | a;
         });
 }
 
@@ -2486,49 +2802,200 @@ FILE: fluid_simulation/src/simulation.cpp
 ================================================================================
 #include "simulation.h"
 #include "field.h"
+#include <iostream>
 
-simulation::simulation(uint _Nx, uint _Ny, double _omega,
+simulation::simulation(int _Nx, int _Ny, double _omega,
                        InitialisationPattern pattern, bool _bounce)
-    : Nx(_Nx),
-      Ny(_Ny),
+    : global_Nx(_Nx),
       omega(_omega),
       bounce(_bounce) {
-    speed = ScalarField2D("particle_speed", Nx, Ny);
-    rgb_speed = PixelField("speed_pixels", Nx * Ny);
-    rgb_direction = PixelField("direction_pixels", Nx * Ny);
-    // rgb = PixelField("speed_pixels", Nx * Ny);
-    initialize_lbm(Nx, Ny, rho, v, f, f_next, pattern);
+
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+    local_Ny = _Ny / size;
+    int remainder = _Ny % size;
+
+    if (remainder != 0 && rank == 0) {
+        std::cerr << "Warning: Ny is not perfectly divisible by MPI size. "
+                     "Truncating boundary conditions.\n";
+    }
+
+    global_Ny = local_Ny * size;
+    offset_y = rank * local_Ny;
+
+    speed = ScalarField2D("particle_speed", global_Nx, local_Ny + 2);
+    rgb_speed = PixelField("speed_pixels", global_Nx * local_Ny);
+    rgb_direction = PixelField("direction_pixels", global_Nx * local_Ny);
+
+    send_top = HaloBuf("send_top", global_Nx, 3);
+    recv_top = HaloBuf("recv_top", global_Nx, 3);
+    send_bottom = HaloBuf("send_bottom", global_Nx, 3);
+    recv_bottom = HaloBuf("recv_bottom", global_Nx, 3);
+
+    h_send_top = Kokkos::create_mirror_view(send_top);
+    h_recv_top = Kokkos::create_mirror_view(recv_top);
+    h_send_bottom = Kokkos::create_mirror_view(send_bottom);
+    h_recv_bottom = Kokkos::create_mirror_view(recv_bottom);
+
+    initialize_lbm(global_Nx, global_Ny, local_Ny, offset_y, rho, v, f, f_next,
+                   pattern);
 }
 
 void simulation::step(size_t num_iterations) {
     for (size_t i = 0; i < num_iterations; i++) {
-        streaming(f, f_next, bounce, u_lid);
+        halo_exchange(f, local_Ny, rank, size, bounce, send_top, recv_top,
+                      send_bottom, recv_bottom, h_send_top, h_recv_top,
+                      h_send_bottom, h_recv_bottom);
+        streaming(f, f_next, bounce, u_lid, offset_y, global_Ny);
         std::swap(f, f_next);
-        compute_velocity(rho, v, f);
-        collide(f, rho, v, omega);
+        compute_velocity(rho, v, f, local_Ny);
+        collide(f, rho, v, omega, local_Ny);
     }
-    velocity_to_speed(Nx, Ny, v, speed);
-    max_speed = get_max_speed(Nx, Ny, speed, max_speed);
-    speed_to_rgb(Nx, Ny, speed, rgb_speed, max_speed);
-    velocity_dir_to_rgb(Nx, Ny, v, rgb_direction, max_speed);
+    velocity_to_speed(global_Nx, local_Ny, v, speed);
+
+    double local_max = get_max_speed(global_Nx, local_Ny, speed, max_speed);
+    MPI_Allreduce(&local_max, &max_speed, 1, MPI_DOUBLE, MPI_MAX,
+                  MPI_COMM_WORLD);
+
+    speed_to_rgb(global_Nx, local_Ny, speed, rgb_speed, max_speed);
+    velocity_dir_to_rgb(global_Nx, local_Ny, v, rgb_direction, max_speed);
+}
+
+double simulation::get_total_density() {
+    double local_mass = 0;
+    auto l_rho = rho; // Alias view inside scope to prevent "this" illegal
+                      // access on Device lambda
+    Kokkos::parallel_reduce(
+        "local_mass",
+        Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 1},
+                                               {global_Nx, local_Ny + 1}),
+        KOKKOS_LAMBDA(const int x, const int y, double &sum) {
+            sum += l_rho(x, y);
+        },
+        local_mass);
+
+    double global_mass = 0;
+    MPI_Allreduce(&local_mass, &global_mass, 1, MPI_DOUBLE, MPI_SUM,
+                  MPI_COMM_WORLD);
+    return global_mass;
+}
+
+double simulation::get_total_kinetic_energy() {
+    double local_ke = 0;
+    auto l_rho = rho;
+    auto l_v = v;
+    Kokkos::parallel_reduce(
+        "local_ke",
+        Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 1},
+                                               {global_Nx, local_Ny + 1}),
+        KOKKOS_LAMBDA(const int x, const int y, double &sum) {
+            double vx = l_v(x, y, 0);
+            double vy = l_v(x, y, 1);
+            sum += 0.5 * l_rho(x, y) * (vx * vx + vy * vy);
+        },
+        local_ke);
+
+    double global_ke = 0;
+    MPI_Allreduce(&local_ke, &global_ke, 1, MPI_DOUBLE, MPI_SUM,
+                  MPI_COMM_WORLD);
+    return global_ke;
+}
+
+HostVectorField2D simulation::get_global_velocity() {
+    HostVectorField2D global_v;
+    if (rank == 0) {
+        global_v = HostVectorField2D("global_v", global_Nx, global_Ny);
+    }
+
+    auto local_v_host = Kokkos::create_mirror_view(v);
+    Kokkos::deep_copy(local_v_host, v);
+
+    std::vector<double> send_buf(global_Nx * local_Ny * 2);
+    for (int y = 1; y <= local_Ny; ++y) {
+        for (int x = 0; x < global_Nx; ++x) {
+            send_buf[((y - 1) * global_Nx + x) * 2 + 0] = local_v_host(x, y, 0);
+            send_buf[((y - 1) * global_Nx + x) * 2 + 1] = local_v_host(x, y, 1);
+        }
+    }
+
+    std::vector<double> recv_buf;
+    if (rank == 0)
+        recv_buf.resize(global_Nx * global_Ny * 2);
+
+    MPI_Gather(send_buf.data(), send_buf.size(), MPI_DOUBLE, recv_buf.data(),
+               send_buf.size(), MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+    if (rank == 0) {
+        for (int y = 0; y < global_Ny; ++y) {
+            for (int x = 0; x < global_Nx; ++x) {
+                global_v(x, y, 0) = recv_buf[(y * global_Nx + x) * 2 + 0];
+                global_v(x, y, 1) = recv_buf[(y * global_Nx + x) * 2 + 1];
+            }
+        }
+    }
+    return global_v;
+}
+
+HostPixelField simulation::get_global_rgb_speed() {
+    HostPixelField global_rgb;
+    if (rank == 0) {
+        global_rgb = HostPixelField("global_rgb_speed", global_Nx * global_Ny);
+    }
+
+    auto local_rgb_host = Kokkos::create_mirror_view(rgb_speed);
+    Kokkos::deep_copy(local_rgb_host, rgb_speed);
+
+    MPI_Gather(local_rgb_host.data(), local_rgb_host.extent(0), MPI_UINT32_T,
+               global_rgb.data(), local_rgb_host.extent(0), MPI_UINT32_T, 0,
+               MPI_COMM_WORLD);
+
+    return global_rgb;
+}
+
+HostPixelField simulation::get_global_rgb_direction() {
+    HostPixelField global_rgb;
+    if (rank == 0) {
+        global_rgb = HostPixelField("global_rgb_dir", global_Nx * global_Ny);
+    }
+
+    auto local_rgb_host = Kokkos::create_mirror_view(rgb_direction);
+    Kokkos::deep_copy(local_rgb_host, rgb_direction);
+
+    MPI_Gather(local_rgb_host.data(), local_rgb_host.extent(0), MPI_UINT32_T,
+               global_rgb.data(), local_rgb_host.extent(0), MPI_UINT32_T, 0,
+               MPI_COMM_WORLD);
+
+    return global_rgb;
 }
 
 ================================================================================
 FILE: fluid_simulation/includes/simulation.h
 ================================================================================
 #include "field.h"
+#include <mpi.h>
 
 #ifndef SIMULATION_H
 #define SIMULATION_H
 
+using HostVectorField2D = Kokkos::View<double **[2]>::host_mirror_type;
+using HostPixelField = PixelField::host_mirror_type;
+using HostScalarField2D = Kokkos::View<double **>::host_mirror_type;
+
 class simulation {
   public:
-    int Nx = 1500;
-    int Ny = 1000;
+    int global_Nx;
+    int global_Ny;
+    int local_Ny;
+    int offset_y;
+    int rank;
+    int size;
+
     bool bounce = true;
-    double omega = 1.0; // 0 to 2
+    double omega = 1.0;
     double max_speed = 0;
     double u_lid = 0.0;
+
     ScalarField2D rho;
     VectorField2D v;
     ScalarField2D speed;
@@ -2537,12 +3004,26 @@ class simulation {
     PixelField rgb_speed;
     PixelField rgb_direction;
 
+    // Halo communication buffers for Domain Decomposition
+    HaloBuf send_top, recv_top, send_bottom, recv_bottom;
+    HaloBufHost h_send_top, h_recv_top, h_send_bottom, h_recv_bottom;
+
   public:
-    simulation(uint Nx = 1500, uint Ny = 1000, double omega = 1.0,
+    simulation(int Nx = 1500, int Ny = 1000, double omega = 1.0,
                InitialisationPattern pattern = InitialisationPattern::Droplet,
                bool bounce = true);
     ~simulation() = default;
+
     void step(size_t num_iterations = 1);
+
+    // Global Reduction quantities
+    double get_total_density();
+    double get_total_kinetic_energy();
+
+    // Synchronization functions to pool decomposed views
+    HostVectorField2D get_global_velocity();
+    HostPixelField get_global_rgb_speed();
+    HostPixelField get_global_rgb_direction();
 };
 
 #endif
@@ -2551,15 +3032,20 @@ class simulation {
 FILE: fluid_simulation/includes/field.h
 ================================================================================
 #include <Kokkos_Core.hpp>
+#include <mpi.h>
 
 #ifndef FIELD_H
 #define FIELD_H
+
 // Define alias types for cleaner code
-// We use compile-time dimensions ([2] and [9]) for the last indices.
 using ScalarField2D = Kokkos::View<double **>;
 using VectorField2D = Kokkos::View<double **[2]>;
 using DistFuncD2Q9 = Kokkos::View<double **[9]>;
 using PixelField = Kokkos::View<uint32_t *>;
+
+// Boundary Communication Halo Buffer Types
+using HaloBuf = Kokkos::View<double **>;
+using HaloBufHost = HaloBuf::host_mirror_type;
 
 enum InitialisationPattern {
     Empty,
@@ -2569,20 +3055,37 @@ enum InitialisationPattern {
     ShearWave,
 };
 
-void initialize_lbm(int Nx, int Ny, ScalarField2D &rho, VectorField2D &v,
-                    DistFuncD2Q9 &f, DistFuncD2Q9 &f_next,
-                    InitialisationPattern pattern);
-void compute_velocity(ScalarField2D rho, VectorField2D v, DistFuncD2Q9 f);
-// void streaming(DistFuncD2Q9 f_in, DistFuncD2Q9 f_out, bool bounce);
-void streaming(DistFuncD2Q9 f_in, DistFuncD2Q9 f_out, bool bounce,
-               double u_lid = 0.0);
-void collide(DistFuncD2Q9 f, ScalarField2D rho, VectorField2D v, double omega);
-void velocity_to_speed(int Nx, int Ny, VectorField2D v, ScalarField2D speed);
-double get_max_speed(int Nx, int Ny, ScalarField2D speed, double prev_max);
-void speed_to_rgb(int Nx, int Ny, ScalarField2D speed, PixelField rgb_speed,
-                  double max_speed);
-void velocity_dir_to_rgb(int Nx, int Ny, VectorField2D v, PixelField rgb,
+void initialize_lbm(int Nx, int global_Ny, int local_Ny, int offset_y,
+                    ScalarField2D &rho, VectorField2D &v, DistFuncD2Q9 &f,
+                    DistFuncD2Q9 &f_next, InitialisationPattern pattern);
+
+void compute_velocity(ScalarField2D rho, VectorField2D v, DistFuncD2Q9 f,
+                      int local_Ny);
+
+void streaming(DistFuncD2Q9 f_in, DistFuncD2Q9 f_out, bool bounce, double u_lid,
+               int offset_y, int global_Ny);
+
+void collide(DistFuncD2Q9 f, ScalarField2D rho, VectorField2D v, double omega,
+             int local_Ny);
+
+void velocity_to_speed(int Nx, int local_Ny, VectorField2D v,
+                       ScalarField2D speed);
+
+double get_max_speed(int Nx, int local_Ny, ScalarField2D speed,
+                     double prev_max);
+
+void speed_to_rgb(int Nx, int local_Ny, ScalarField2D speed,
+                  PixelField rgb_speed, double max_speed);
+
+void velocity_dir_to_rgb(int Nx, int local_Ny, VectorField2D v, PixelField rgb,
                          double max_speed);
+
+void halo_exchange(DistFuncD2Q9 f, int local_Ny, int rank, int size,
+                   bool bounce, HaloBuf send_top, HaloBuf recv_top,
+                   HaloBuf send_bottom, HaloBuf recv_bottom,
+                   HaloBufHost h_send_top, HaloBufHost h_recv_top,
+                   HaloBufHost h_send_bottom, HaloBufHost h_recv_bottom);
+
 #endif
 
 ================================================================================
@@ -2608,7 +3111,6 @@ FILE: milestone05/visualisation.cpp
 #include <mpi.h>
 #include <vector>
 
-// Include SDL3
 #include <SDL3/SDL.h>
 
 int main(int argc, char *argv[]) {
@@ -2623,8 +3125,8 @@ int main(int argc, char *argv[]) {
 
     {
         // Setup Grid and Cavity Parameters
-        uint Nx = 256;
-        uint Ny = 256;
+        int Nx = 256;
+        int Ny = 256;
         double u_lid = 0.1;
         double omega = 1.7;
 
@@ -2633,7 +3135,6 @@ int main(int argc, char *argv[]) {
             std::cout << "Grid: " << Nx << "x" << Ny << "\n";
             std::cout << "Omega: " << omega << ", Lid Velocity: " << u_lid
                       << "\n";
-            std::cout << "Close the window to exit.\n";
         }
 
         // Initialize simulation with Hard Walls (bounce = true) and Empty
@@ -2641,9 +3142,7 @@ int main(int argc, char *argv[]) {
         simulation sim{Nx, Ny, omega, InitialisationPattern::Empty, true};
         sim.u_lid = u_lid;
 
-        // =========================================================================
         // SDL3 SETUP (Only on Rank 0)
-        // =========================================================================
         SDL_Window *window = nullptr;
         SDL_Renderer *renderer = nullptr;
         SDL_Texture *texture = nullptr;
@@ -2657,7 +3156,7 @@ int main(int argc, char *argv[]) {
 
             // Scale the window up by a factor of 2 so it is easier to see
             int window_width = Nx * 2;
-            int window_height = Ny * 2;
+            int window_height = sim.global_Ny * 2;
             window = SDL_CreateWindow("Lid-Driven Cavity Flow", window_width,
                                       window_height, 0);
 
@@ -2665,32 +3164,25 @@ int main(int argc, char *argv[]) {
             // dimensions
             renderer = SDL_CreateRenderer(window, nullptr);
             texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888,
-                                        SDL_TEXTUREACCESS_STREAMING, Nx, Ny);
+                                        SDL_TEXTUREACCESS_STREAMING, Nx,
+                                        sim.global_Ny);
         }
 
         bool quit = false;
         size_t render_after_steps = 15;
 
-        // Run until the user closes the window
         while (!quit) {
-            // Compute physics steps
+            // Run until the user closes the window
             sim.step(render_after_steps);
+            auto h_pixels = sim.get_global_rgb_direction();
 
-            // Rank 0 handles the GUI and Events
             if (rank == 0) {
                 SDL_Event e;
                 while (SDL_PollEvent(&e)) {
-                    if (e.type == SDL_EVENT_QUIT) {
+                    if (e.type == SDL_EVENT_QUIT)
                         quit = true;
-                    }
                 }
 
-                // Copy only the computed color pixels from Device (GPU) to Host
-                // (CPU)
-                auto h_pixels = Kokkos::create_mirror_view_and_copy(
-                    Kokkos::HostSpace{}, sim.rgb_direction);
-
-                // Push pixels to the SDL texture and render
                 SDL_UpdateTexture(texture, nullptr, h_pixels.data(),
                                   Nx * sizeof(uint32_t));
                 SDL_RenderClear(renderer);
@@ -2698,8 +3190,6 @@ int main(int argc, char *argv[]) {
                 SDL_RenderPresent(renderer);
             }
 
-            // Sync the "quit" state to all other MPI processes so they exit
-            // together
             int quit_int = quit ? 1 : 0;
             MPI_Bcast(&quit_int, 1, MPI_INT, 0, MPI_COMM_WORLD);
             quit = (quit_int == 1);
@@ -2738,92 +3228,97 @@ int main(int argc, char *argv[]) {
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
+    int Nx = 128;
+    int Ny = 128;
+    double u_lid = 0.1;
+    double omega = 1.7;
+
     if (rank == 0) {
-        int Nx = 128;
-        int Ny = 128;
-        double u_lid = 0.1;
-        double omega = 1.7;
-
         std::cout << "Starting lid-driven cavity simulation (Re ~ 435)...\n";
+    }
 
-        simulation sim{static_cast<uint>(Nx), static_cast<uint>(Ny), omega,
-                       InitialisationPattern::Empty, true};
-        sim.u_lid = u_lid;
+    simulation sim{Nx, Ny, omega, InitialisationPattern::Empty, true};
+    sim.u_lid = u_lid;
 
-        double max_diff = 1.0;
-        double threshold = 1e-6; // Ensure precise steady state
+    double max_diff = 1.0;
+    double threshold = 1e-6;
 
-        auto v_host = Kokkos::create_mirror_view(sim.v);
-        auto v_prev = Kokkos::create_mirror_view(sim.v);
+    auto v_host = Kokkos::create_mirror_view(sim.v);
+    auto v_prev = Kokkos::create_mirror_view(sim.v);
 
-        Kokkos::deep_copy(v_prev, 0.0);
+    Kokkos::deep_copy(v_prev, 0.0);
 
-        int step = 0;
-        int check_interval = 200;
+    int step = 0;
+    int check_interval = 200;
 
-        while (max_diff > threshold) {
-            // Run bulk of the checks independently
-            sim.step(check_interval - 1);
-            Kokkos::fence();
-            Kokkos::deep_copy(v_prev, sim.v); // Save state explicitly
+    while (max_diff > threshold) {
+        sim.step(check_interval - 1);
+        Kokkos::fence();
+        Kokkos::deep_copy(v_prev, sim.v);
 
-            // Step singularly to find exact successive diff
-            sim.step(1);
-            Kokkos::fence();
-            Kokkos::deep_copy(v_host, sim.v);
+        sim.step(1);
+        Kokkos::fence();
+        Kokkos::deep_copy(v_host, sim.v);
 
-            max_diff = 0.0;
-            for (int y = 0; y < Ny; ++y) {
-                for (int x = 0; x < Nx; ++x) {
-                    double dx = v_host(x, y, 0) - v_prev(x, y, 0);
-                    double dy = v_host(x, y, 1) - v_prev(x, y, 1);
-                    double diff = std::sqrt(dx * dx + dy * dy);
-                    if (diff > max_diff) {
-                        max_diff = diff;
-                    }
+        double local_max_diff = 0.0;
+        for (int y = 1; y <= sim.local_Ny; ++y) {
+            for (int x = 0; x < Nx; ++x) {
+                double dx = v_host(x, y, 0) - v_prev(x, y, 0);
+                double dy = v_host(x, y, 1) - v_prev(x, y, 1);
+                double diff = std::sqrt(dx * dx + dy * dy);
+                if (diff > local_max_diff) {
+                    local_max_diff = diff;
                 }
-            }
-            step += check_interval;
-            if (step % 2000 == 0) {
-                std::cout << "Step " << step
-                          << " max velocity change: " << max_diff << "\n";
             }
         }
 
+        MPI_Allreduce(&local_max_diff, &max_diff, 1, MPI_DOUBLE, MPI_MAX,
+                      MPI_COMM_WORLD);
+
+        step += check_interval;
+        if (rank == 0 && step % 2000 == 0) {
+            std::cout << "Step " << step << " max velocity change: " << max_diff
+                      << "\n";
+        }
+    }
+
+    if (rank == 0)
         std::cout << "Converged to steady-state after " << step << " steps.\n";
 
-        // Benchmark strict performance explicitly without host communication
-        int bench_steps = 10000;
-        Kokkos::fence();
-        Kokkos::Timer timer;
+    int bench_steps = 10000;
+    Kokkos::fence();
+    Kokkos::Timer timer;
 
-        sim.step(bench_steps);
-        Kokkos::fence();
+    sim.step(bench_steps);
+    Kokkos::fence();
 
+    if (rank == 0) {
         double runtime = timer.seconds();
-        double mlups =
-            (static_cast<double>(Nx) * Ny * bench_steps) / (runtime * 1e6);
+        double mlups = (static_cast<double>(Nx) * sim.global_Ny * bench_steps) /
+                       (runtime * 1e6);
         std::cout << "\nRuntime over continuous " << bench_steps
                   << " steps: " << runtime << " s\n";
         std::cout << "Performance: " << mlups << " MLUPS\n\n";
+    }
 
-        // Output steady state vector field
+    auto global_v = sim.get_global_velocity();
+
+    if (rank == 0) {
         std::ofstream out("lid_driven_cavity.csv");
         out << "x,y,ux,uy\n";
-        for (int y = 0; y < Ny; ++y) {
+        for (int y = 0; y < sim.global_Ny; ++y) {
             for (int x = 0; x < Nx; ++x) {
-                out << x << "," << y << "," << v_host(x, y, 0) << ","
-                    << v_host(x, y, 1) << "\n";
+                out << x << "," << y << "," << global_v(x, y, 0) << ","
+                    << global_v(x, y, 1) << "\n";
             }
         }
         std::cout << "Velocity field saved to lid_driven_cavity.csv\n";
 
-        // Output the centerline velocity profile
         std::ofstream profile("centerline_profile.csv");
         profile << "y,ux\n";
         int center_x = Nx / 2;
-        for (int y = 0; y < Ny; ++y) {
-            profile << y << "," << v_host(center_x, y, 0) << "\n";
+        for (int y = 0; y < sim.global_Ny; ++y) {
+            profile << y << "," << global_v(center_x, y, 0) << "\n";
         }
         std::cout
             << "Centerline velocity profile saved to centerline_profile.csv\n";
@@ -2918,26 +3413,23 @@ int main(int argc, char *argv[]) {
 
     {
         // Setup Grid and Cavity Parameters with a large canvas
-        uint Nx = 1024;
-        uint Ny = 1024;
+        int Nx = 1024;
+        int Ny = 1024;
         double u_lid = 0.1;
         double omega = 1.7;
 
         simulation sim{Nx, Ny, omega, InitialisationPattern::Empty, true};
         sim.u_lid = u_lid;
 
-        auto rgb_host = Kokkos::create_mirror_view(sim.rgb_direction);
-
         size_t render_after_steps = 15;
-        size_t total_frames = 2000; // Total frames to render for the video
+        size_t total_frames = 2000;
 
         FILE *ffmpeg = nullptr;
 
-        // Only Rank 0 handles the video encoding
         if (rank == 0) {
-            // Open a pipe to FFmpeg.
             std::string cmd = "ffmpeg -y -f rawvideo -pix_fmt abgr -s " +
-                              std::to_string(Nx) + "x" + std::to_string(Ny) +
+                              std::to_string(Nx) + "x" +
+                              std::to_string(sim.global_Ny) +
                               " -r 60 -i - -c:v libx264 -pix_fmt yuv420p "
                               "milestone05_video.mp4";
 
@@ -2951,20 +3443,17 @@ int main(int argc, char *argv[]) {
             }
         }
 
-        // Start timing
         auto start_time = std::chrono::high_resolution_clock::now();
 
-        // Simulation and Recording Loop
         for (size_t frame = 0; frame < total_frames; ++frame) {
             sim.step(render_after_steps);
+            auto h_pixels = sim.get_global_rgb_direction();
 
             if (rank == 0 && ffmpeg) {
-                Kokkos::deep_copy(rgb_host, sim.rgb_direction);
-
                 // Write the raw pixel buffer directly to FFmpeg
-                size_t written =
-                    fwrite(rgb_host.data(), sizeof(uint32_t), Nx * Ny, ffmpeg);
-                if (written != Nx * Ny) {
+                size_t written = fwrite(h_pixels.data(), sizeof(uint32_t),
+                                        Nx * sim.global_Ny, ffmpeg);
+                if (written != static_cast<size_t>(Nx * sim.global_Ny)) {
                     std::cerr << "Error writing frame to FFmpeg pipe!\n";
                 }
 
@@ -3027,82 +3516,76 @@ int main(int argc, char *argv[]) {
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-    // Limit evaluation metrics strictly to one Rank
-    if (rank == 0) {
-        int Nx = 100;
-        int Ny = 100;
+    int Nx = 100;
+    int Ny = 100;
 
-        // 1. Plot evolution of velocity profile for omega = 1.0 (approaching
-        // limit t -> infinity)
-        {
-            std::cout
-                << "Simulating velocity profile evolution for omega = 1.0...\n";
-            // Initialize ShearWave with `bounce = false` so Periodic boundary
-            // conditions are active.
-            simulation sim{static_cast<uint>(Nx), static_cast<uint>(Ny), 1.0,
-                           InitialisationPattern::ShearWave, false};
+    // 1. Plot evolution of velocity profile for omega = 1.0
+    if (rank == 0)
+        std::cout
+            << "Simulating velocity profile evolution for omega = 1.0...\n";
+    {
+        simulation sim{Nx, Ny, 1.0, InitialisationPattern::ShearWave, false};
 
-            std::ofstream out("velocity_profile.csv");
+        std::ofstream out;
+        if (rank == 0) {
+            out.open("velocity_profile.csv");
             out << "y,t,ux\n";
-
-            auto v_host = Kokkos::create_mirror_view(sim.v);
-
-            // Advance in steps of 500 up to 4000 to clearly observe complete
-            // decay (t -> infinity).
-            for (int t = 0; t <= 4000; t += 500) {
-                Kokkos::deep_copy(v_host, sim.v);
-                for (int y = 0; y < Ny; ++y) {
-                    out << y << "," << t << "," << v_host(0, y, 0) << "\n";
-                }
-                if (t < 4000)
-                    sim.step(500);
-            }
         }
 
-        // 2. Measure analytical and computational viscosity across a spread of
-        // Omega ranges.
+        for (int t = 0; t <= 4000; t += 500) {
+            auto global_v = sim.get_global_velocity();
+            if (rank == 0) {
+                for (int y = 0; y < Ny; ++y) {
+                    out << y << "," << t << "," << global_v(0, y, 0) << "\n";
+                }
+            }
+            if (t < 4000)
+                sim.step(500);
+        }
+    }
+
+    // 2. Measure analytical and computational viscosity
+    if (rank == 0)
         std::cout << "Measuring viscosity vs omega...\n";
-        std::vector<double> omegas = {0.5, 0.6, 0.8, 1.0, 1.2,
-                                      1.4, 1.6, 1.8, 1.9};
+    std::vector<double> omegas = {0.5, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 1.9};
 
-        std::ofstream out("viscosity.csv");
+    std::ofstream out;
+    if (rank == 0) {
+        out.open("viscosity.csv");
         out << "omega,measured_nu,analytical_nu\n";
+    }
 
-        for (double omega : omegas) {
-            simulation sim{static_cast<uint>(Nx), static_cast<uint>(Ny), omega,
-                           InitialisationPattern::ShearWave, false};
+    for (double omega : omegas) {
+        simulation sim{Nx, Ny, omega, InitialisationPattern::ShearWave, false};
 
-            double k = 2.0 * M_PI / Ny;
-            double analytical_nu = (1.0 / 3.0) * (1.0 / omega - 0.5);
+        double k = 2.0 * M_PI / Ny;
+        double analytical_nu = (1.0 / 3.0) * (1.0 / omega - 0.5);
 
-            int steps = 1000;
-            auto v_host = Kokkos::create_mirror_view(sim.v);
+        int steps = 1000;
+        sim.step(100);
 
-            // Initializing $f_i$ directly to equilibrium without Chapman-Enskog
-            // modifications yields minor acoustic artifacts. Therefore we
-            // stabilize the wave by progressing 100 frames before reading
-            // Initial Amp.
-            sim.step(100);
-            Kokkos::deep_copy(v_host, sim.v);
+        auto global_v = sim.get_global_velocity();
+        double initial_amp = 0;
+        if (rank == 0)
+            initial_amp = global_v(0, Ny / 4, 0);
 
-            // The sine wave has a peak velocity amplitude at Ny/4. (Since
-            // Nx=Ny=100 => peak forms exactly at index 25)
-            double initial_amp = v_host(0, Ny / 4, 0);
+        sim.step(steps);
 
-            // Simulate progression
-            sim.step(steps);
-            Kokkos::deep_copy(v_host, sim.v);
-            double final_amp = v_host(0, Ny / 4, 0);
+        global_v = sim.get_global_velocity();
+        double final_amp = 0;
+        if (rank == 0)
+            final_amp = global_v(0, Ny / 4, 0);
 
-            // Calculate Kinematic Viscosity Nu derived from decay amplitude
-            // formulas
+        if (rank == 0) {
             double measured_nu =
                 -std::log(final_amp / initial_amp) / (k * k * steps);
-
             out << omega << "," << measured_nu << "," << analytical_nu << "\n";
             std::cout << "Omega: " << omega << " | Measured Nu: " << measured_nu
                       << " | Analytical Nu: " << analytical_nu << "\n";
         }
+    }
+
+    if (rank == 0) {
         std::cout << "\nResults logged to "
                      "CSVs.\nvelocity_profile.csv\nviscosity.csv\n";
     }
@@ -3176,21 +3659,6 @@ FILE: project/main.cpp
 #include <SDL3/SDL.h>
 #include <cstdint>
 
-// Helper function to map velocity to an RGBA color
-uint32_t velocity_to_color(double vx, double vy, double max_vel = 0.1) {
-    double speed = std::sqrt(vx * vx + vy * vy);
-    double intensity = std::min(speed / max_vel, 1.0);
-
-    // Heatmap gradient: Blue (slow) to Red (fast)
-    uint8_t r = static_cast<uint8_t>(intensity * 255);
-    uint8_t g = 0;
-    uint8_t b = static_cast<uint8_t>((1.0 - intensity) * 255);
-    uint8_t a = 255;
-
-    // SDL_PIXELFORMAT_RGBA8888 standard bit-shifting
-    return (r << 24) | (g << 16) | (b << 8) | a;
-}
-
 int main(int argc, char *argv[]) {
     int rank = 0, size = 1;
 
@@ -3204,17 +3672,14 @@ int main(int argc, char *argv[]) {
     {
         std::cout << "Hello I am rank " << rank << " of " << size << "\n";
 
-        uint Nx = 150 * 4;
-        uint Ny = 100 * 4;
+        int Nx = 150 * 4;
+        int Ny = 100 * 4;
         simulation sim{Nx, Ny, 0.1};
 
-        // =========================================================================
         // SDL3 SETUP (Only on Rank 0)
-        // =========================================================================
         SDL_Window *window = nullptr;
         SDL_Renderer *renderer = nullptr;
         SDL_Texture *texture = nullptr;
-        // std::vector<uint32_t> pixels(Nx * Ny);
 
         if (rank == 0) {
             if (SDL_Init(SDL_INIT_VIDEO) < 0) {
@@ -3234,33 +3699,26 @@ int main(int argc, char *argv[]) {
 
             // Create a texture matching the simulation grid dimensions
             texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888,
-                                        SDL_TEXTUREACCESS_STREAMING, Nx, Ny);
+                                        SDL_TEXTUREACCESS_STREAMING, Nx,
+                                        sim.global_Ny);
         }
 
         bool quit = false;
-        int step = 0;
-
         size_t render_after_steps = 10;
         // Run until the user closes the window
         while (!quit) {
 
             // do the simulation
             sim.step(render_after_steps);
+            auto h_pixels = sim.get_global_rgb_speed();
 
-            // Rank 0 handles the GUI and Events
             if (rank == 0) {
                 SDL_Event e;
                 while (SDL_PollEvent(&e)) {
-                    if (e.type == SDL_EVENT_QUIT) {
+                    if (e.type == SDL_EVENT_QUIT)
                         quit = true;
-                    }
                 }
 
-                // Copy only the computed pixels from Device to Host
-                auto h_pixels = Kokkos::create_mirror_view_and_copy(
-                    Kokkos::HostSpace{}, sim.rgb_speed);
-
-                // Push pixels to the SDL texture and render
                 SDL_UpdateTexture(texture, nullptr, h_pixels.data(),
                                   Nx * sizeof(uint32_t));
                 SDL_RenderClear(renderer);
@@ -3273,7 +3731,6 @@ int main(int argc, char *argv[]) {
             int quit_int = quit ? 1 : 0;
             MPI_Bcast(&quit_int, 1, MPI_INT, 0, MPI_COMM_WORLD);
             quit = (quit_int == 1);
-            step++;
         }
 
         if (rank == 0) {
@@ -3321,13 +3778,10 @@ int main(int argc, char *argv[]) {
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
     {
-        size_t Nx = 1920 / 2;
-        size_t Ny = 1080 / 2;
+        int Nx = 1920 / 2;
+        int Ny = 1080 / 2;
 
         simulation sim{Nx, Ny, 1};
-
-        auto rgb_host = Kokkos::create_mirror_view(sim.rgb_speed);
-        // std::vector<uint32_t> pixels(Nx * Ny);
 
         size_t render_after_steps = 10;
         size_t total_frames = 2000; // Total frames to render for the video
@@ -3348,7 +3802,7 @@ int main(int argc, char *argv[]) {
             // players) output.mp4: the output video file name
             std::string cmd =
                 "ffmpeg -y -f rawvideo -pix_fmt abgr -s " + std::to_string(Nx) +
-                "x" + std::to_string(Ny) +
+                "x" + std::to_string(sim.global_Ny) +
                 " -r 60 -i - -c:v libx264 -pix_fmt yuv420p output.mp4";
 
             ffmpeg = popen(cmd.c_str(), "w");
@@ -3366,14 +3820,13 @@ int main(int argc, char *argv[]) {
         // Simulation and Recording Loop
         for (size_t frame = 0; frame < total_frames; ++frame) {
             sim.step(render_after_steps);
+            auto h_pixels = sim.get_global_rgb_speed();
 
             if (rank == 0 && ffmpeg) {
-                Kokkos::deep_copy(rgb_host, sim.rgb_speed);
-
                 // Write the raw pixel buffer directly to FFmpeg
-                size_t written =
-                    fwrite(rgb_host.data(), sizeof(uint32_t), Nx * Ny, ffmpeg);
-                if (written != Nx * Ny) {
+                size_t written = fwrite(h_pixels.data(), sizeof(uint32_t),
+                                        Nx * sim.global_Ny, ffmpeg);
+                if (written != static_cast<size_t>(Nx * sim.global_Ny)) {
                     std::cerr << "Error writing frame to FFmpeg pipe!\n";
                 }
 
@@ -3407,6 +3860,131 @@ int main(int argc, char *argv[]) {
     Kokkos::finalize();
     MPI_Finalize();
 
+    return 0;
+}
+
+================================================================================
+FILE: milestone06/CMakeLists.txt
+================================================================================
+add_executable(milestone06 main.cpp)
+target_link_libraries(milestone06 PRIVATE fluid_simulation MPI::MPI_CXX Kokkos::kokkos)
+
+================================================================================
+FILE: milestone06/graph.py
+================================================================================
+import matplotlib.pyplot as plt
+
+# Data
+ranks = [1, 2, 4, 5, 8, 10, 20, 25, 40, 50, 100, 125]
+runtime_s = [43.0904, 21.5256, 11.5014, 9.80591, 6.35969, 6.21572, 7.17903, 7.71452, 11.6942, 13.8975, 18.9978, 19.1994]
+performance_mlups = [23.207, 46.4564, 86.9456, 101.979, 157.24, 160.882, 139.295, 129.626, 85.5128, 71.9555, 52.6377, 52.085]
+
+fig, ax1 = plt.subplots(figsize=(11, 6))
+
+# Left axis: runtime
+color1 = "tab:blue"
+ax1.set_xlabel("Number of ranks", fontsize=12)
+ax1.set_ylabel("Runtime (s)", color=color1, fontsize=12)
+l1 = ax1.plot(ranks, runtime_s, marker="o", linewidth=2.5, color=color1, label="Runtime (s)")
+ax1.tick_params(axis="y", labelcolor=color1, labelsize=11)
+ax1.tick_params(axis="x", labelsize=11)
+ax1.grid(True, linestyle="--", alpha=0.35)
+
+# Right axis: performance
+ax2 = ax1.twinx()
+color2 = "tab:red"
+ax2.set_ylabel("Performance (MLUPS)", color=color2, fontsize=12)
+l2 = ax2.plot(ranks, performance_mlups, marker="s", linewidth=2.5, color=color2, label="Performance (MLUPS)")
+ax2.tick_params(axis="y", labelcolor=color2, labelsize=11)
+
+# Title
+plt.title(
+    "Fluid Simulation Scaling: 1000×1000 Matrix, 1000 Steps (BW)\n"
+    "Runtime and Performance vs. Number of Ranks",
+    fontsize=14
+)
+
+# Combine legends
+lines = l1 + l2
+labels = [line.get_label() for line in lines]
+ax1.legend(lines, labels, loc="best", fontsize=11)
+
+plt.tight_layout()
+plt.savefig("simulation_scaling.png", dpi=300, bbox_inches="tight")
+plt.show()
+
+================================================================================
+FILE: milestone06/main.cpp
+================================================================================
+#include "field.h"
+#include "simulation.h"
+#include <Kokkos_Core.hpp>
+#include <iostream>
+#include <mpi.h>
+
+int main(int argc, char *argv[]) {
+    MPI_Init(&argc, &argv);
+    Kokkos::initialize(argc, argv);
+
+    int rank, size;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+    {
+        int Nx = 1000;
+        int Ny = 1000;
+        double omega = 1.0;
+
+        if (rank == 0) {
+            std::cout << "Milestone 06: Distributed memory parallelization "
+                         "with MPI\n";
+            std::cout << "Grid: " << Nx << "x" << Ny << " distributed over "
+                      << size << " ranks.\n";
+            std::cout << "Starting warmup...\n";
+        }
+
+        // Creating simulation across active distributed memory ranks
+        simulation sim{Nx, Ny, omega, InitialisationPattern::Droplet, true};
+
+        // Warm-up to bypass initial system overhead latency
+            sim.step(100);
+            Kokkos::fence();
+            MPI_Barrier(MPI_COMM_WORLD);
+
+        if (rank == 0) {
+            std::cout
+                << "Benchmarking Strong Scaling Performance (1000 steps)...\n";
+        }
+
+        int bench_steps = 1000;
+        Kokkos::Timer timer;
+
+        // Distributed computational effort over domains
+        sim.step(bench_steps);
+        Kokkos::fence();
+        MPI_Barrier(MPI_COMM_WORLD);
+
+        double runtime = timer.seconds();
+
+        // Globally synchronizing derived metrics using Collective Communication
+        double total_mass = sim.get_total_density();
+        double total_ke = sim.get_total_kinetic_energy();
+
+        if (rank == 0) {
+            // Calculate Megalattice Updates Per Second (MLUPS)
+            double mlups =
+                (static_cast<double>(Nx) * sim.global_Ny * bench_steps) /
+                (runtime * 1e6);
+            std::cout << "\n--- Final Results ---\n";
+            std::cout << "Total mass: " << total_mass << "\n";
+            std::cout << "Total kinetic energy: " << total_ke << "\n";
+            std::cout << "Runtime: " << runtime << " s\n";
+            std::cout << "Performance: " << mlups << " MLUPS\n";
+        }
+    }
+
+    Kokkos::finalize();
+    MPI_Finalize();
     return 0;
 }
 

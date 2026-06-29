@@ -7,24 +7,21 @@ simulation::simulation(int _Nx, int _Ny, double _omega,
     : global_Nx(_Nx),
       omega(_omega),
       bounce(_bounce) {
-
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
     local_Ny = _Ny / size;
-    int remainder = _Ny % size;
-
-    if (remainder != 0 && rank == 0) {
-        std::cerr << "Warning: Ny is not perfectly divisible by MPI size. "
-                     "Truncating boundary conditions.\n";
-    }
-
     global_Ny = local_Ny * size;
     offset_y = rank * local_Ny;
 
     speed = ScalarField2D("particle_speed", global_Nx, local_Ny + 2);
     rgb_speed = PixelField("speed_pixels", global_Nx * local_Ny);
     rgb_direction = PixelField("direction_pixels", global_Nx * local_Ny);
+    rgb_density = PixelField("density_pixels", global_Nx * local_Ny);
+
+    cell_type = CellTypeField("cell_type", global_Nx, local_Ny + 2);
+    h_cell_type = Kokkos::create_mirror_view(cell_type);
+    Kokkos::deep_copy(cell_type, 0);
 
     send_top = HaloBuf("send_top", global_Nx, 3);
     recv_top = HaloBuf("recv_top", global_Nx, 3);
@@ -45,19 +42,24 @@ void simulation::step(size_t num_iterations) {
         halo_exchange(f, local_Ny, rank, size, bounce, send_top, recv_top,
                       send_bottom, recv_bottom, h_send_top, h_recv_top,
                       h_send_bottom, h_recv_bottom);
-        streaming(f, f_next, bounce, u_lid, offset_y, global_Ny);
+        streaming(f, f_next, bounce, u_lid, offset_y, global_Ny, cell_type);
         std::swap(f, f_next);
+        apply_sources(f, cell_type, local_Ny);
         compute_velocity(rho, v, f, local_Ny);
         collide(f, rho, v, omega, local_Ny);
     }
     velocity_to_speed(global_Nx, local_Ny, v, speed);
-
     double local_max = get_max_speed(global_Nx, local_Ny, speed, max_speed);
     MPI_Allreduce(&local_max, &max_speed, 1, MPI_DOUBLE, MPI_MAX,
                   MPI_COMM_WORLD);
 
     speed_to_rgb(global_Nx, local_Ny, speed, rgb_speed, max_speed);
     velocity_dir_to_rgb(global_Nx, local_Ny, v, rgb_direction, max_speed);
+    density_to_rgb(global_Nx, local_Ny, rho, rgb_density);
+}
+
+void simulation::reset() {
+    initialize_lbm(global_Nx, global_Ny, local_Ny, offset_y, rho, v, f, f_next, InitialisationPattern::Empty);
 }
 
 double simulation::get_total_density() {
@@ -159,6 +161,21 @@ HostPixelField simulation::get_global_rgb_direction() {
 
     auto local_rgb_host = Kokkos::create_mirror_view(rgb_direction);
     Kokkos::deep_copy(local_rgb_host, rgb_direction);
+
+    MPI_Gather(local_rgb_host.data(), local_rgb_host.extent(0), MPI_UINT32_T,
+               global_rgb.data(), local_rgb_host.extent(0), MPI_UINT32_T, 0,
+               MPI_COMM_WORLD);
+
+    return global_rgb;
+}
+
+HostPixelField simulation::get_global_rgb_density() {
+    HostPixelField global_rgb;
+    if (rank == 0)
+        global_rgb = HostPixelField("global_rgb_dens", global_Nx * global_Ny);
+
+    auto local_rgb_host = Kokkos::create_mirror_view(rgb_density);
+    Kokkos::deep_copy(local_rgb_host, rgb_density);
 
     MPI_Gather(local_rgb_host.data(), local_rgb_host.extent(0), MPI_UINT32_T,
                global_rgb.data(), local_rgb_host.extent(0), MPI_UINT32_T, 0,

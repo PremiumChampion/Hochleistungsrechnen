@@ -1,7 +1,7 @@
 #!/bin/bash -x
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --time=00:02:00
+#SBATCH --time=01:00:00
 #SBATCH -J milestone06
 #SBATCH --mem=6gb
 #SBATCH --export=ALL

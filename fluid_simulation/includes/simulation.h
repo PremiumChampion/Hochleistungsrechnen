@@ -10,27 +10,20 @@ using HostScalarField2D = Kokkos::View<double **>::host_mirror_type;
 
 class simulation {
   public:
-    int global_Nx;
-    int global_Ny;
-    int local_Ny;
-    int offset_y;
-    int rank;
-    int size;
-
+    int global_Nx, global_Ny, local_Ny, offset_y, rank, size;
     bool bounce = true;
     double omega = 1.0;
     double max_speed = 0;
     double u_lid = 0.0;
 
-    ScalarField2D rho;
+    ScalarField2D rho, speed;
     VectorField2D v;
-    ScalarField2D speed;
-    DistFuncD2Q9 f;
-    DistFuncD2Q9 f_next;
-    PixelField rgb_speed;
-    PixelField rgb_direction;
+    DistFuncD2Q9 f, f_next;
+    PixelField rgb_speed, rgb_direction, rgb_density;
 
-    // Halo communication buffers for Domain Decomposition
+    CellTypeField cell_type;
+    CellTypeField::host_mirror_type h_cell_type;
+
     HaloBuf send_top, recv_top, send_bottom, recv_bottom;
     HaloBufHost h_send_top, h_recv_top, h_send_bottom, h_recv_bottom;
 
@@ -41,15 +34,14 @@ class simulation {
     ~simulation() = default;
 
     void step(size_t num_iterations = 1);
-
-    // Global Reduction quantities
+    void reset();
     double get_total_density();
     double get_total_kinetic_energy();
 
-    // Synchronization functions to pool decomposed views
     HostVectorField2D get_global_velocity();
     HostPixelField get_global_rgb_speed();
     HostPixelField get_global_rgb_direction();
+    HostPixelField get_global_rgb_density();
 };
 
 #endif

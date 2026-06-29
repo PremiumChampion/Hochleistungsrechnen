@@ -214,6 +214,20 @@ void compute_velocity(ScalarField2D rho, VectorField2D v, DistFuncD2Q9 f,
                 local_vy += f_i * cy[i];
             }
 
+            // Prevent division by zero and extreme densities causing explosion
+            if (local_rho < 0.1)
+                local_rho = 0.1;
+            if (local_rho > 3.0)
+                local_rho = 3.0;
+
+            double speed_sq = local_vx * local_vx + local_vy * local_vy;
+
+            if (speed_sq > 0.16) {
+                double scale = Kokkos::sqrt(0.16 / speed_sq);
+                local_vx *= scale;
+                local_vy *= scale;
+            }
+
             // Store the computed density
             rho(x, y) = local_rho;
 
@@ -224,7 +238,7 @@ void compute_velocity(ScalarField2D rho, VectorField2D v, DistFuncD2Q9 f,
 }
 
 void streaming(DistFuncD2Q9 f_in, DistFuncD2Q9 f_out, bool bounce, double u_lid,
-               int offset_y, int global_Ny) {
+               int offset_y, int global_Ny, CellTypeField cell_type) {
     const int Nx = f_out.extent(0);
     const int local_Ny = f_out.extent(1) - 2;
 
@@ -232,58 +246,89 @@ void streaming(DistFuncD2Q9 f_in, DistFuncD2Q9 f_out, bool bounce, double u_lid,
         "StreamingStep",
         Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 1}, {Nx, local_Ny + 1}),
         KOKKOS_LAMBDA(const int x, const int y) {
-            // Standard D2Q9 discrete velocity components (integers for
-            // grid indexing)
             const int cx[9] = {0, 1, 0, -1, 0, 1, -1, -1, 1};
             const int cy[9] = {0, 0, 1, 0, -1, 1, 1, -1, -1};
+            const double w[9] = {4. / 9.,  1. / 9.,  1. / 9.,  1. / 9., 1. / 9.,
+                                 1. / 36., 1. / 36., 1. / 36., 1. / 36.};
+            const int opp[9] = {0, 3, 4, 1, 2, 7, 8, 5, 6};
 
-            if (!bounce) {
-                for (int i = 0; i < 9; ++i) {
-                    // Determine the coordinates of the neighboring node
-                    // to "pull" from. We subtract cx[i] and cy[i]
-                    // because we are looking BACKWARDS to the source
-                    // node that sent the particle towards (x, y).
+            for (int i = 0; i < 9; ++i) {
+                int src_x = x - cx[i];
+                int src_y = y - cy[i];
+                int global_src_y = src_y + offset_y - 1;
 
-                    // Adding Nx and Ny before the modulo operator
-                    // ensures that the dividend is positive, properly
-                    // handling wrap-around for periodic boundary
-                    // conditions on the left/bottom edges.
-                    int src_x = (x - cx[i] + Nx) % Nx;
-                    int src_y = y - cy[i];
-                    // Copy the distribution function from the source
-                    // node
-                    f_out(x, y, i) = f_in(src_x, src_y, i);
-                }
-            } else {
-                const double w[9] = {4. / 9.,  1. / 9.,  1. / 9.,
-                                     1. / 9.,  1. / 9.,  1. / 36.,
-                                     1. / 36., 1. / 36., 1. / 36.};
-                const int opp[9] = {0, 3, 4, 1, 2, 7, 8, 5, 6};
+                bool is_wall = false;
 
-                for (int i = 0; i < 9; ++i) {
-                    // Determine the coordinates of the neighboring node
-                    // to "pull" from.
-                    int src_x = x - cx[i];
-                    int src_y = y - cy[i];
-
-                    // Check if the source node is outside the domain
-                    // (i.e., hitting a wall)
-                    int global_src_y = src_y + offset_y - 1;
-
-                    if (src_x < 0 || src_x >= Nx || global_src_y < 0 ||
-                        global_src_y >= global_Ny) {
-                        // Bounce-back: reflect the distribution
-                        // function from the wall
-                        f_out(x, y, i) = f_in(x, y, opp[i]);
-                        if (global_src_y >= global_Ny) {
-                            f_out(x, y, i) += 6.0 * w[i] * cx[i] * u_lid;
-                        }
-                    } else {
-                        // Normal streaming from the source node
-                        f_out(x, y, i) = f_in(src_x, src_y, i);
+                // Edge bounce conditions OR inner drawn wall cells (1)
+                if (bounce && (src_x < 0 || src_x >= Nx || global_src_y < 0 ||
+                               global_src_y >= global_Ny)) {
+                    is_wall = true;
+                } else {
+                    src_x = (src_x + Nx) % Nx; // Periodic wrap on X
+                    if (cell_type(src_x, src_y) == 1) {
+                        is_wall = true; // User drawn internal wall
                     }
                 }
+
+                if (is_wall) {
+                    f_out(x, y, i) = f_in(x, y, opp[i]);
+                    // Only apply lid velocity if bouncing on the top global
+                    // wall
+                    if (bounce && global_src_y >= global_Ny) {
+                        f_out(x, y, i) += 6.0 * w[i] * cx[i] * u_lid;
+                    }
+                } else {
+                    f_out(x, y, i) = f_in(src_x, src_y, i);
+                }
             }
+        });
+}
+
+void apply_sources(DistFuncD2Q9 f, CellTypeField cell_type, int local_Ny) {
+    int Nx = f.extent(0);
+    Kokkos::parallel_for(
+        "ApplySources",
+        Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 1}, {Nx, local_Ny + 1}),
+        KOKKOS_LAMBDA(const int x, const int y) {
+            int type = cell_type(x, y);
+            const double w[9] = {4. / 9.,  1. / 9.,  1. / 9.,  1. / 9., 1. / 9.,
+                                 1. / 36., 1. / 36., 1. / 36., 1. / 36.};
+
+            // Instead of injecting unbounded mass, we enforce a constant
+            // pressure/density boundary.
+            if (type == 2) {
+                // SOURCE: Constant high density (rho = 1.3), velocity = 0
+                for (int i = 0; i < 9; ++i)
+                    f(x, y, i) = w[i] * 1.3;
+            } else if (type == 3) {
+                // SINK: Constant low density (rho = 0.7), velocity = 0
+                for (int i = 0; i < 9; ++i)
+                    f(x, y, i) = w[i] * 0.7;
+            }
+        });
+}
+
+void density_to_rgb(int Nx, int local_Ny, ScalarField2D rho,
+                    PixelField rgb_density) {
+    Kokkos::parallel_for(
+        "DensityToColor",
+        Kokkos::MDRangePolicy<Kokkos::Rank<2>>(
+            {0, 1}, {static_cast<int>(Nx), static_cast<int>(local_Ny + 1)}),
+        KOKKOS_LAMBDA(const int x, const int y) {
+            double r_val = rho(x, y);
+            // Map density roughly [0.8, 1.2] to [0, 1.0] intensity range
+            double intensity = (r_val - 0.8) / 0.4;
+            if (intensity < 0.0)
+                intensity = 0.0;
+            if (intensity > 1.0)
+                intensity = 1.0;
+
+            // Blue to Red Colormap
+            uint8_t r = static_cast<uint8_t>(intensity * 255.0);
+            uint8_t b = static_cast<uint8_t>((1.0 - intensity) * 255.0);
+
+            rgb_density((y - 1) * Nx + x) =
+                (r << 24) | (0 << 16) | (b << 8) | 255;
         });
 }
 
