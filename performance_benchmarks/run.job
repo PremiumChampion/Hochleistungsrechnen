@@ -1,0 +1,17 @@
+#!/bin/bash -x
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --time=00:02:00
+#SBATCH -J milestone06
+#SBATCH --mem=6gb
+#SBATCH --export=ALL
+#SBATCH --partition=cpu
+
+module load compiler/gnu mpi/openmpi
+
+echo "Running on ${SLURM_JOB_NUM_NODES} nodes with ${SLURM_JOB_CPUS_PER_NODE} cores each."
+echo "Each node has ${SLURM_MEM_PER_NODE} of memory allocated to this job."
+
+cd /home/fr/fr_fr/fr_tw313/Hochleistungsrechnen/build/Release
+
+time mpirun milestone06

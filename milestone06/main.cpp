@@ -29,9 +29,9 @@ int main(int argc, char *argv[]) {
         simulation sim{Nx, Ny, omega, InitialisationPattern::Droplet, true};
 
         // Warm-up to bypass initial system overhead latency
-        sim.step(100);
-        Kokkos::fence();
-        MPI_Barrier(MPI_COMM_WORLD);
+            sim.step(100);
+            Kokkos::fence();
+            MPI_Barrier(MPI_COMM_WORLD);
 
         if (rank == 0) {
             std::cout
