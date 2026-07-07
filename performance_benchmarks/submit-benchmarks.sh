@@ -86,4 +86,26 @@ for TASKS in 1 2 4 8 16 32; do
     echo "  Weak 2D: tasks=$TASKS, grid=${WEAK_NX}x${WEAK_NY}"
 
     sbatch --nodes=$NODES --ntasks-per-node=$TASKS_PER_NODE \
+           --partition=$QUEUE --gres=gpu:$TASKS_PER_NODE \
+           --job-name="Weak2D_${TASKS}" --output="slurm-weak-2d-%j.out" \
+           run-bwunicluster.job --dim 2 --Nx $WEAK_NX --Ny $WEAK_NY \
+           --steps $STEPS --scaling weak --csv $CSV_FILE
+
+    # 1D weak scaling: expand only in y (1D decomposition is y-slab)
+    WEAK_NY_1D=$(( TASKS * BASE_NY_PER_TASK ))
+
+    echo "  Weak 1D: tasks=$TASKS, grid=${BASE_NX_PER_TASK}x${WEAK_NY_1D}"
+
+    sbatch --nodes=$NODES --ntasks-per-node=$TASKS_PER_NODE \
+           --partition=$QUEUE --gres=gpu:$TASKS_PER_NODE \
+           --job-name="Weak1D_${TASKS}" --output="slurm-weak-1d-%j.out" \
+           run-bwunicluster.job --dim 1 --Nx $BASE_NX_PER_TASK --Ny $WEAK_NY_1D \
+           --steps $STEPS --scaling weak --csv $CSV_FILE
+done
+
+echo ""
+echo "========================================"
+echo "  All jobs submitted!"
+echo "  Check status:  squeue -u \$USER"
+echo "  CSV results:   $CSV_FILE"
 echo "========================================"
