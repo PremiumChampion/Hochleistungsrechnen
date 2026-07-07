@@ -10,6 +10,4 @@ module load toolkit/nvidia-hpc-sdk/25.1
 echo "Running on ${SLURM_JOB_NUM_NODES} nodes with ${SLURM_NTASKS} total tasks."
 
 # Execute passing through all arguments supplied by the scheduler
-cd /home/fr/fr_fr/fr_tw313/Hochleistungsrechnen/build/Release
-
-time mpirun benchmark "$@"
+time mpirun /home/fr/fr_fr/fr_tw313/Hochleistungsrechnen/build/Release/benchmark "$@"
