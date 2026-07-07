@@ -1,5 +1,5 @@
 #!/bin/bash -x
-#SBATCH --time=02:00:00
+#SBATCH --time=00:30:00
 #SBATCH --export=ALL
 
 module purge
