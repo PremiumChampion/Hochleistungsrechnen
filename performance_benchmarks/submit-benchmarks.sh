@@ -20,10 +20,6 @@ echo ""
 
 # -------------------------------------------------------
 # STRONG SCALING: Fixed problem size, increasing hardware
-# Question: "How much faster does a fixed-size problem
-#            run as you add more networking nodes?"
-# Expectation (Amdahl's Law): Runtime decreases with more
-# tasks, but speedup saturates when comm_time dominates.
 # -------------------------------------------------------
 echo ">>> Submitting Strong Scaling Benchmarks (Fixed 8000x8000)..."
 
@@ -33,7 +29,6 @@ STRONG_NY=8000
 for TASKS in 1 2 4 8 16 32; do
     NODES=$(( (TASKS + 3) / 4 ))
     TASKS_PER_NODE=$(( TASKS / NODES ))
-    # Handle case where TASKS < 4 (single node, fewer GPUs)
     if [ "$TASKS" -lt 4 ]; then
         NODES=1
         TASKS_PER_NODE=$TASKS
@@ -41,14 +36,12 @@ for TASKS in 1 2 4 8 16 32; do
 
     echo "  Strong: tasks=$TASKS, nodes=$NODES, tasks_per_node=$TASKS_PER_NODE"
 
-    # 2D strong scaling
     sbatch --nodes=$NODES --ntasks-per-node=$TASKS_PER_NODE \
            --partition=$QUEUE --gres=gpu:$TASKS_PER_NODE \
            --job-name="Strong2D_${TASKS}" --output="slurm-strong-2d-%j.out" \
            run-bwunicluster.job --dim 2 --Nx $STRONG_NX --Ny $STRONG_NY \
            --steps $STEPS --scaling strong --csv $CSV_FILE
 
-    # 1D strong scaling
     sbatch --nodes=$NODES --ntasks-per-node=$TASKS_PER_NODE \
            --partition=$QUEUE --gres=gpu:$TASKS_PER_NODE \
            --job-name="Strong1D_${TASKS}" --output="slurm-strong-1d-%j.out" \
@@ -58,14 +51,19 @@ done
 
 # -------------------------------------------------------
 # WEAK SCALING: Problem size grows with hardware
-# Question: "Can the network sustain throughput if the
-#            problem size grows proportionally?"
-# Expectation (Gustafson's Law): Runtime stays constant
-# if network bandwidth scales. Any increase indicates
-# MPI synchronization or bandwidth bottleneck.
+# 2D decomposition grows BOTH dimensions in alternation
+# (quadratic/balanced growth): every two doublings of TASKS,
+# both Nx and Ny have doubled, so area = TASKS * base_area.
+#
+#   TASKS=1  -> 4k x 4k
+#   TASKS=2  -> 4k x 8k
+#   TASKS=4  -> 8k x 8k
+#   TASKS=8  -> 8k x 16k
+#   TASKS=16 -> 16k x 16k
+#   TASKS=32 -> 16k x 32k
 # -------------------------------------------------------
 echo ""
-echo ">>> Submitting Weak Scaling Benchmarks (4000x4000 per GPU)..."
+echo ">>> Submitting Weak Scaling Benchmarks (balanced 2D growth)..."
 
 BASE_NX_PER_TASK=4000
 BASE_NY_PER_TASK=4000
@@ -78,12 +76,28 @@ for TASKS in 1 2 4 8 16 32; do
         TASKS_PER_NODE=$TASKS
     fi
 
-    # 2D weak scaling: expand domain in both x and y
-    # For 2D decomposition, split expansion across both dims
-    WEAK_NX=$(( TASKS * BASE_NX_PER_TASK ))
-    WEAK_NY=$BASE_NY_PER_TASK
+    # ---- 2D weak scaling: balanced (alternating) growth ----
+    # Compute log2(TASKS)
+    doubles=0
+    n=$TASKS
+    while [ "$n" -gt 1 ]; do
+        n=$(( n / 2 ))
+        doubles=$(( doubles + 1 ))
+    done
 
-    echo "  Weak 2D: tasks=$TASKS, grid=${WEAK_NX}x${WEAK_NY}"
+    half=$(( doubles / 2 ))
+    if [ $(( doubles % 2 )) -eq 0 ]; then
+        factor_x=$(( 2 ** half ))
+        factor_y=$factor_x
+    else
+        factor_x=$(( 2 ** half ))
+        factor_y=$(( 2 ** (half + 1) ))
+    fi
+
+    WEAK_NX=$(( BASE_NX_PER_TASK * factor_x ))
+    WEAK_NY=$(( BASE_NY_PER_TASK * factor_y ))
+
+    echo "  Weak 2D: tasks=$TASKS, grid=${WEAK_NX}x${WEAK_NY} (factors ${factor_x}x${factor_y})"
 
     sbatch --nodes=$NODES --ntasks-per-node=$TASKS_PER_NODE \
            --partition=$QUEUE --gres=gpu:$TASKS_PER_NODE \
@@ -91,7 +105,7 @@ for TASKS in 1 2 4 8 16 32; do
            run-bwunicluster.job --dim 2 --Nx $WEAK_NX --Ny $WEAK_NY \
            --steps $STEPS --scaling weak --csv $CSV_FILE
 
-    # 1D weak scaling: expand only in y (1D decomposition is y-slab)
+    # ---- 1D weak scaling: expand only in y (y-slab decomposition) ----
     WEAK_NY_1D=$(( TASKS * BASE_NY_PER_TASK ))
 
     echo "  Weak 1D: tasks=$TASKS, grid=${BASE_NX_PER_TASK}x${WEAK_NY_1D}"
@@ -109,4 +123,3 @@ echo "  All jobs submitted!"
 echo "  Check status:  squeue -u \$USER"
 echo "  CSV results:   $CSV_FILE"
 echo "========================================"
-
