@@ -13,7 +13,7 @@ if os.path.exists("velocity_profile.csv"):
     plt.title(r"Shear-Wave Decay Velocity Profile Evolution ($\omega=1.0$)")
     plt.legend()
     plt.grid()
-    plt.savefig("velocity_profile.png")
+    plt.savefig("velocity_profile.png", dpi=600)
     print("Exported velocity_profile.png")
     plt.close()
 
@@ -52,6 +52,6 @@ if os.path.exists("viscosity.csv"):
     
     plt.title("Measured vs Analytical Kinematic Viscosity")
     fig.tight_layout()
-    plt.savefig("viscosity.png")
+    plt.savefig("viscosity-delta.png", dpi=300)
     print("Exported viscosity.png with delta values")
     plt.close()

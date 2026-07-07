@@ -1,0 +1,2 @@
+add_executable(project_video_export_presentation main.cpp)
+target_link_libraries(project_video_export_presentation PRIVATE fluid_simulation MPI::MPI_CXX Kokkos::kokkos)

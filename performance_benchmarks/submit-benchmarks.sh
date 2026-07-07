@@ -2,7 +2,7 @@
 set -euo pipefail
 
 STEPS=2000
-QUEUE="gpu_a100_short"       # Target A100 GPU nodes (4 GPUs per node)
+QUEUE="gpu_a100_il"
 CSV_FILE="benchmark_results.csv"
 
 # Clean previous results

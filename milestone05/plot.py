@@ -29,7 +29,7 @@ if os.path.exists("lid_driven_cavity.csv"):
     ax.set_ylabel("y")
     ax.set_aspect('equal')
     
-    plt.savefig("lid_driven_cavity.png", dpi=150)
+    plt.savefig("lid_driven_cavity.png", dpi=600)
     print("Exported lid_driven_cavity.png")
     plt.close()
 
@@ -49,6 +49,6 @@ if os.path.exists("centerline_profile.csv"):
     plt.title("Centerline Velocity Profile ($x = L/2$)")
     plt.legend()
     plt.grid()
-    plt.savefig("centerline_profile.png", dpi=150)
+    plt.savefig("centerline_profile.png", dpi=600)
     print("Exported centerline_profile.png")
     plt.close()
