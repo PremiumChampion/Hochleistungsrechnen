@@ -72,19 +72,19 @@ FetchContent_Declare(
   GIT_TAG        badbf8da4ee72b3ef599c721ffc9899e8d7c8d90 # release-3.2.26
 )
 
-FetchContent_Declare(
-  sdl3_image
-  GIT_REPOSITORY https://github.com/libsdl-org/SDL_image.git
-  GIT_TAG        11154afb7855293159588b245b446a4ef09e574f # release-3.2.4
-)
+# FetchContent_Declare(
+#   sdl3_image
+#   GIT_REPOSITORY https://github.com/libsdl-org/SDL_image.git
+#   GIT_TAG        11154afb7855293159588b245b446a4ef09e574f # release-3.2.4
+# )
 
-FetchContent_Declare(
-  sdl3_net
-  GIT_REPOSITORY https://github.com/libsdl-org/SDL_net.git
-  GIT_TAG        c2757cbbcbed2fd8ed98b79c66447f292221c81c # main
-)
+# FetchContent_Declare(
+#   sdl3_net
+#   GIT_REPOSITORY https://github.com/libsdl-org/SDL_net.git
+#   GIT_TAG        c2757cbbcbed2fd8ed98b79c66447f292221c81c # main
+# )
 
-FetchContent_MakeAvailable(sdl3 sdl3_image sdl3_net)
+FetchContent_MakeAvailable(sdl3)
 
 enable_testing()
 add_subdirectory(fluid_simulation)

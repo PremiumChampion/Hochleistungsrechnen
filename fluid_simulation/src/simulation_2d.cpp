@@ -13,13 +13,6 @@ Simulation2D::Simulation2D(int _Nx, int _Ny, double _omega,
 
     setup_cartesian_topology();
 
-    // Local domain sizes (assumes even division; extend for remainders if
-    // needed)
-    local_Nx = global_Nx / dims[0];
-    local_Ny = global_Ny / dims[1];
-    offset_x = coords[0] * local_Nx;
-    offset_y = coords[1] * local_Ny;
-
     // Fields with ghost cells on ALL FOUR sides: (local_Nx+2) × (local_Ny+2)
     // Interior indices: x ∈ [1, local_Nx], y ∈ [1, local_Ny]
     rho = ScalarField2D("rho", local_Nx + 2, local_Ny + 2);
@@ -119,6 +112,13 @@ void Simulation2D::setup_cartesian_topology() {
     } else {
         nbr_sw = MPI_PROC_NULL;
     }
+
+    // Local domain sizes (assumes even division; extend for remainders if
+    // needed)
+    local_Nx = global_Nx / dims[0];
+    local_Ny = global_Ny / dims[1];
+    offset_x = coords[0] * local_Nx;
+    offset_y = coords[1] * local_Ny;
 
     if (rank == 0) {
         std::cout << "2D Domain Decomposition: " << dims[0] << " × " << dims[1]
@@ -370,7 +370,7 @@ void Simulation2D::step(size_t num_iterations) {
         compute_velocity_2d(rho, v, f, local_Nx, local_Ny);
         collide_2d(f, rho, v, omega, local_Nx, local_Ny);
         // Wait for GPU computations to complete!
-        Kokkos::fence(); 
+        Kokkos::fence();
         total_compute_time += step_timer.seconds();
         total_comm_time += comm_time;
     }
