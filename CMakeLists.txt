@@ -30,19 +30,28 @@ if(NOT Eigen3_FOUND)
         add_library(Eigen3::Eigen ALIAS eigen)
     endif()
 endif()
-# set(Kokkos_DIR "~/kokkos-install/lib/cmake/Kokkos")
-find_package(Kokkos REQUIRED)
-# find_package(Kokkos 4.7.03)
-# if(NOT Kokkos_FOUND)
-#     include(FetchContent)
-#     FetchContent_Declare(
-#       kokkos
-#       URL https://github.com/kokkos/kokkos/archive/refs/tags/4.7.03.tar.gz
-#     )
-#     set(Kokkos_ENABLE_TESTS OFF CACHE BOOL "Disable Kokkos tests" FORCE)
-#     set(Kokkos_ENABLE_EXAMPLES OFF CACHE BOOL "Disable Kokkos examples" FORCE)
-#     FetchContent_MakeAvailable(kokkos)
-# endif()
+
+find_package(Kokkos 4.7.03)
+if(NOT Kokkos_FOUND)
+    include(FetchContent)
+    FetchContent_Declare(
+      kokkos
+      URL https://github.com/kokkos/kokkos/archive/refs/tags/4.7.03.tar.gz
+    )
+    set(Kokkos_ENABLE_TESTS OFF CACHE BOOL "Disable Kokkos tests" FORCE)
+    set(Kokkos_ENABLE_EXAMPLES OFF CACHE BOOL "Disable Kokkos examples" FORCE)
+
+    # Enable modern CMake CUDA compilation
+    # set(Kokkos_ENABLE_COMPILE_AS_CMAKE_LANGUAGE ON CACHE BOOL "Compile as CUDA" FORCE)
+    # set(Kokkos_ENABLE_CUDA ON CACHE BOOL "Enable CUDA" FORCE)
+    # set(Kokkos_ENABLE_DEBUG ON CACHE BOOL "Enable DEBUG" FORCE)
+    # # Target RTX 3070 GPU (Ampere86)
+    # set(Kokkos_ARCH_AMPERE86 ON CACHE BOOL "RTX 3070 Architecture" FORCE)
+
+    FetchContent_MakeAvailable(kokkos)
+
+    kokkos_compilation(GLOBAL)
+endif()
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/$<CONFIGURATION>")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/$<CONFIGURATION>")
@@ -86,3 +95,4 @@ add_subdirectory(milestone04)
 add_subdirectory(milestone05)
 add_subdirectory(milestone06)
 add_subdirectory(interactive)
+add_subdirectory(benchmark)

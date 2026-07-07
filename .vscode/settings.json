@@ -4,7 +4,7 @@
         "args": [
             "--kokkos-device-id=0"
         ],
-        "cwd": "/home/woyte/Studium/repos/hochleistungsrechnen/"
+        "cwd": "/home/woyte/hochleistungsrechnen"
     },
     // "cmake.buildArgs": [
     //     "-j",
