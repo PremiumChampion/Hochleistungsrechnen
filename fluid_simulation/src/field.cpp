@@ -136,9 +136,9 @@ void initialize_lbm(int global_Nx, int global_Ny, int local_Nx, int local_Ny,
 }
 
 /**
- * LBM Streaming Step (Advection).
- * Moves particle distributions to neighboring cells based on their discrete velocities.
- * Uses a "pull" scheme (f_out reads from f_in's neighbors) to avoid data races in parallel execution.
+ * Streaming
+ * Moves particle distributions to neighboring cells based on their discrete velocities
+ * pull scheme (f_out reads from f_in's neighbors) avoids data races in parallel execution
  */
 void streaming(DistFuncD2Q9 f_in, DistFuncD2Q9 f_out, bool bounce, double u_lid,
                int offset_x, int offset_y, int global_Nx, int global_Ny,
@@ -199,7 +199,7 @@ void streaming(DistFuncD2Q9 f_in, DistFuncD2Q9 f_out, bool bounce, double u_lid,
 }
 
 /**
- * LBM Collision Step (Relaxation).
+ * Collision (Relaxation).
  * Implements the BGK (Bhatnagar-Gross-Krook) approximation.
  * Relaxes the particle distributions towards the local macroscopic equilibrium.
  */
@@ -233,7 +233,7 @@ void collide(DistFuncD2Q9 f, ScalarField2D rho, VectorField2D v, double omega, i
 
 /**
  * Recalculates Macroscopic Properties.
- * Computes density (zeroth moment) and momentum (first moment) from the distribution functions.
+ * computes density and momentum from the distribution functions.
  */
 void compute_velocity(ScalarField2D rho, VectorField2D v, DistFuncD2Q9 f, int local_Nx, int local_Ny) {
     Kokkos::parallel_for("ComputeMacroscopicFields",
@@ -245,26 +245,13 @@ void compute_velocity(ScalarField2D rho, VectorField2D v, DistFuncD2Q9 f, int lo
             double local_rho = 0.0;
             double local_vx = 0.0;
             double local_vy = 0.0;
-            
+
             // Sum up distributions to get density and momentum
             for (int i = 0; i < 9; ++i) {
                 double f_i = f(x, y, i);
                 local_rho += f_i;
                 local_vx += f_i * cx[i];
                 local_vy += f_i * cy[i];
-            }
-            
-            // Artificial bounds to prevent numeric explosions (LBM instability limiters)
-            if (local_rho < 0.1) local_rho = 0.1;
-            if (local_rho > 3.0) local_rho = 3.0;
-            
-            // Velocity limiting: LBM is strictly valid for low Mach numbers (u << c_s, c_s = 1/sqrt(3) ~ 0.577)
-            // Limit velocity magnitude to sqrt(0.16) = 0.4 to prevent instability crashes.
-            double speed_sq = local_vx * local_vx + local_vy * local_vy;
-            if (speed_sq > 0.16) {
-                double scale = Kokkos::sqrt(0.16 / speed_sq);
-                local_vx *= scale;
-                local_vy *= scale;
             }
             
             rho(x, y) = local_rho;
