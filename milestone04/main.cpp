@@ -22,7 +22,7 @@ int main(int argc, char *argv[]) {
         std::cout
             << "Simulating velocity profile evolution for omega = 1.0...\n";
     {
-        simulation sim{Nx, Ny, 1.0, InitialisationPattern::ShearWave, false};
+        Simulation sim{Nx, Ny, 1.0, InitialisationPattern::ShearWave, false};
 
         std::ofstream out;
         if (rank == 0) {
@@ -54,7 +54,7 @@ int main(int argc, char *argv[]) {
     }
 
     for (double omega : omegas) {
-        simulation sim{Nx, Ny, omega, InitialisationPattern::ShearWave, false};
+        Simulation sim{Nx, Ny, omega, InitialisationPattern::ShearWave, false};
 
         double k = 2.0 * M_PI / Ny;
         double analytical_nu = (1.0 / 3.0) * (1.0 / omega - 0.5);

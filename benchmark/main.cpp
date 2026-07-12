@@ -1,5 +1,6 @@
-#include "simulation_1d.h"
-#include "simulation_2d.h"
+// #include "simulation_1d.h"
+// #include "simulation_2d.h"
+#include "simulation.h"
 #include <Kokkos_Core.hpp>
 #include <cmath>
 #include <fstream>
@@ -57,54 +58,31 @@ int main(int argc, char *argv[]) {
         double total_mass = 0, total_ke = 0;
         double compute_time = 0, comm_time = 0, runtime = 0;
 
-        if (dim == 1) {
-            Simulation1D sim{Nx, Ny, omega, InitialisationPattern::Droplet,
-                             true};
+        Simulation sim{
+            Nx,    Ny,
+            omega, InitialisationPattern::Droplet,
+            true,  dim == 1 ? DecompType::DECOMP_1D : DecompType::DECOMP_2D};
 
-            // Warm-up to bypass JIT latency and cache warming
-            sim.step(100);
-            Kokkos::fence();
-            MPI_Barrier(MPI_COMM_WORLD);
-            sim.total_compute_time = 0.0;
-            sim.total_comm_time = 0.0;
+        // Warm-up to bypass JIT latency and cache warming
+        sim.step(100);
+        Kokkos::fence();
+        MPI_Barrier(MPI_COMM_WORLD);
+        sim.total_compute_time = 0.0;
+        sim.total_comm_time = 0.0;
 
-            if (rank == 0)
-                std::cout << "Benchmarking " << bench_steps << " steps...\n";
+        if (rank == 0)
+            std::cout << "Benchmarking " << bench_steps << " steps...\n";
 
-            Kokkos::Timer timer;
-            sim.step(bench_steps);
-            Kokkos::fence();
-            MPI_Barrier(MPI_COMM_WORLD);
-            runtime = timer.seconds();
+        Kokkos::Timer timer;
+        sim.step(bench_steps);
+        Kokkos::fence();
+        MPI_Barrier(MPI_COMM_WORLD);
+        runtime = timer.seconds();
 
-            total_mass = sim.get_total_density();
-            total_ke = sim.get_total_kinetic_energy();
-            compute_time = sim.total_compute_time;
-            comm_time = sim.total_comm_time;
-        } else {
-            Simulation2D sim{Nx, Ny, omega, InitialisationPattern::Droplet,
-                             true};
-
-            sim.step(100);
-            Kokkos::fence();
-            MPI_Barrier(MPI_COMM_WORLD);
-            sim.total_compute_time = 0.0;
-            sim.total_comm_time = 0.0;
-
-            if (rank == 0)
-                std::cout << "Benchmarking " << bench_steps << " steps...\n";
-
-            Kokkos::Timer timer;
-            sim.step(bench_steps);
-            Kokkos::fence();
-            MPI_Barrier(MPI_COMM_WORLD);
-            runtime = timer.seconds();
-
-            total_mass = sim.get_total_density();
-            total_ke = sim.get_total_kinetic_energy();
-            compute_time = sim.total_compute_time;
-            comm_time = sim.total_comm_time;
-        }
+        total_mass = sim.get_total_density();
+        total_ke = sim.get_total_kinetic_energy();
+        compute_time = sim.total_compute_time;
+        comm_time = sim.total_comm_time;
 
         if (rank == 0) {
             // Calculate Performance Metrics

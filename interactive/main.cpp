@@ -70,7 +70,7 @@ int main(int argc, char *argv[]) {
 
         // Use unique_ptr to easily swap simulations on the fly when resizing
         auto sim =
-            std::make_unique<simulation>(state.Nx, state.Ny, state.omega,
+            std::make_unique<Simulation>(state.Nx, state.Ny, state.omega,
                                          InitialisationPattern::Empty, false);
         std::vector<int> global_cells(state.Nx * state.Ny, 0);
 
@@ -233,8 +233,8 @@ int main(int argc, char *argv[]) {
                 break;
 
             if (state.resized) {
-                // Reconstruct the simulation entirely
-                sim = std::make_unique<simulation>(
+                // Reconstruct the Simulation entirely
+                sim = std::make_unique<Simulation>(
                     state.Nx, state.Ny, state.omega,
                     InitialisationPattern::Empty, false);
 

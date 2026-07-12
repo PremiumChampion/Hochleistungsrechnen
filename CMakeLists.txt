@@ -8,6 +8,23 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+
+
+find_package(GTest)
+if(NOT GTest_FOUND)
+    include(FetchContent)
+
+    FetchContent_Declare(
+      googletest
+      URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.tar.gz
+    )
+    set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(googletest)
+endif()
+
+enable_testing()
+
 # Dependencies: MPI, Eigen3, Kokkos
 find_package(MPI REQUIRED)
 if(MPI_CXX_FOUND)
@@ -18,6 +35,7 @@ endif()
 find_package(Eigen3 5.0.1)
 if(NOT Eigen3_FOUND)
     include(FetchContent)
+
     FetchContent_Declare(
       eigen3
       URL https://gitlab.com/libeigen/eigen/-/archive/5.0.1/eigen-5.0.1.tar.gz
@@ -43,10 +61,10 @@ if(NOT Kokkos_FOUND)
 
     # Enable modern CMake CUDA compilation
     # set(Kokkos_ENABLE_COMPILE_AS_CMAKE_LANGUAGE ON CACHE BOOL "Compile as CUDA" FORCE)
-    # set(Kokkos_ENABLE_CUDA ON CACHE BOOL "Enable CUDA" FORCE)
+    set(Kokkos_ENABLE_CUDA ON CACHE BOOL "Enable CUDA" FORCE)
     # set(Kokkos_ENABLE_DEBUG ON CACHE BOOL "Enable DEBUG" FORCE)
     # # Target RTX 3070 GPU (Ampere86)
-    # set(Kokkos_ARCH_AMPERE86 ON CACHE BOOL "RTX 3070 Architecture" FORCE)
+    set(Kokkos_ARCH_AMPERE86 ON CACHE BOOL "RTX 3070 Architecture" FORCE)
 
     FetchContent_MakeAvailable(kokkos)
 
@@ -97,3 +115,4 @@ add_subdirectory(milestone05)
 add_subdirectory(milestone06)
 add_subdirectory(interactive)
 add_subdirectory(benchmark)
+add_subdirectory(tests)

@@ -23,7 +23,7 @@ int main(int argc, char *argv[]) {
         int Nx = 1920 / 2;
         int Ny = 1080 / 2;
 
-        simulation sim{Nx, Ny, 1};
+        Simulation sim{Nx, Ny, 1};
 
         size_t render_after_steps = 10;
         size_t total_frames = 2000; // Total frames to render for the video

@@ -26,7 +26,7 @@ int main(int argc, char *argv[]) {
         }
 
         // Creating simulation across active distributed memory ranks
-        simulation sim{Nx, Ny, omega, InitialisationPattern::Droplet, true};
+        Simulation sim{Nx, Ny, omega, InitialisationPattern::Droplet, true};
 
         // Warm-up to bypass initial system overhead latency
             sim.step(100);

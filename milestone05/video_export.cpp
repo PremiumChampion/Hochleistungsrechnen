@@ -26,7 +26,7 @@ int main(int argc, char *argv[]) {
         double u_lid = 0.1;
         double omega = 1.7;
 
-        simulation sim{Nx, Ny, omega, InitialisationPattern::Empty, true};
+        Simulation sim{Nx, Ny, omega, InitialisationPattern::Empty, true};
         sim.u_lid = u_lid;
 
         size_t render_after_steps = 15;
@@ -47,7 +47,7 @@ int main(int argc, char *argv[]) {
                              "FFmpeg is installed.\n";
             } else {
                 std::cout
-                    << "Recording simulation to milestone05_video.mp4...\n";
+                    << "Recording Simulation to milestone05_video.mp4...\n";
             }
         }
 

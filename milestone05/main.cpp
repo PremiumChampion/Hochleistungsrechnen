@@ -23,7 +23,7 @@ int main(int argc, char *argv[]) {
         std::cout << "Starting lid-driven cavity simulation (Re ~ 435)...\n";
     }
 
-    simulation sim{Nx, Ny, omega, InitialisationPattern::Empty, true};
+    Simulation sim{Nx, Ny, omega, InitialisationPattern::Empty, true};
     sim.u_lid = u_lid;
 
     double max_diff = 1.0;

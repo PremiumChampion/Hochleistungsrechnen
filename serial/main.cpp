@@ -13,7 +13,7 @@
 // Include SDL3
 #include <SDL3/SDL.h>
 
-void serialize(const simulation &sim, const std::string &filename) {
+void serialize(const Simulation &sim, const std::string &filename) {
     auto rho_h = Kokkos::create_mirror_view(sim.rho);
     auto v_h = Kokkos::create_mirror_view(sim.v);
     auto f_h = Kokkos::create_mirror_view(sim.f);
@@ -47,7 +47,7 @@ void serialize(const simulation &sim, const std::string &filename) {
     std::cout << "Simulation serialized to " << filename << "\n";
 }
 
-void deserialize(simulation &sim, const std::string &filename) {
+void deserialize(Simulation &sim, const std::string &filename) {
     std::ifstream in(filename, std::ios::binary);
     if (!in.is_open()) {
         std::cerr << "Error: Could not open file " << filename
@@ -62,7 +62,7 @@ void deserialize(simulation &sim, const std::string &filename) {
     in.read(reinterpret_cast<char *>(&Ny), sizeof(int));
     in.read(reinterpret_cast<char *>(&omega), sizeof(double));
 
-    sim = simulation(Nx, Ny, omega);
+    sim = Simulation(Nx, Ny, omega);
 
     auto rho_h = Kokkos::create_mirror_view(sim.rho);
     auto v_h = Kokkos::create_mirror_view(sim.v);
@@ -103,12 +103,12 @@ int main(int argc, char *argv[]) {
 
             if (mode == "save") {
                 if (rank == 0)
-                    std::cout << "Running simulation and saving to " << filename
+                    std::cout << "Running Simulation and saving to " << filename
                               << "...\n";
 
                 uint Nx = 150 * 4;
                 uint Ny = 100 * 4;
-                simulation sim{static_cast<int>(Nx), static_cast<int>(Ny), 1.0};
+                Simulation sim{static_cast<int>(Nx), static_cast<int>(Ny), 1.0};
 
                 size_t steps = 100;
                 if (argc > 3)
@@ -122,10 +122,10 @@ int main(int argc, char *argv[]) {
 
             } else if (mode == "load") {
                 if (rank == 0)
-                    std::cout << "Loading simulation from " << filename
+                    std::cout << "Loading Simulation from " << filename
                               << " and visualizing...\n";
 
-                simulation sim;
+                Simulation sim;
                 deserialize(sim, filename);
 
                 int Nx = sim.global_Nx;

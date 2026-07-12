@@ -34,7 +34,7 @@ int main(int argc, char *argv[]) {
 
         // Initialize simulation with Hard Walls (bounce = true) and Empty
         // distribution
-        simulation sim{Nx, Ny, omega, InitialisationPattern::Empty, true};
+        Simulation sim{Nx, Ny, omega, InitialisationPattern::Empty, true};
         sim.u_lid = u_lid;
 
         // SDL3 SETUP (Only on Rank 0)
@@ -55,7 +55,7 @@ int main(int argc, char *argv[]) {
             window = SDL_CreateWindow("Lid-Driven Cavity Flow", window_width,
                                       window_height, 0);
 
-            // Create a renderer and a texture matching the simulation grid
+            // Create a renderer and a texture matching the Simulation grid
             // dimensions
             renderer = SDL_CreateRenderer(window, nullptr);
             texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888,

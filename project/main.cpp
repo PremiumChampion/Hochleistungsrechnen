@@ -26,7 +26,7 @@ int main(int argc, char *argv[]) {
 
         int Nx = 150 * 4;
         int Ny = 100 * 4;
-        simulation sim{Nx, Ny, 0.1};
+        Simulation sim{Nx, Ny, 0.1};
 
         // SDL3 SETUP (Only on Rank 0)
         SDL_Window *window = nullptr;
