@@ -20,69 +20,99 @@ int main(int argc, char *argv[]) {
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
     {
-        // Widescreen 16:9 aspect ratio suitable for presentation slides
+        // Full HD 1080p Resolution
         int Nx = 1920;
         int Ny = 1080;
 
-        // Omega = 1.75 keeps the simulation stable under pressure gradients
-        double omega = 1.75;
+        // Omega = 1.75 balances low viscosity (for high turbulence) with
+        // numerical stability
+        double omega = 1.7;
         simulation sim{Nx, Ny, omega, InitialisationPattern::Empty, true};
 
-        // Obstacle setup
-        // Placed at 1/5th of the channel length
-        int cx = Nx / 5;
-        // Shifted by +3 units off-center to break vertical symmetry
-        int cy = Ny / 2 + 3;
-        int radius = Ny / 15; // Diameter of ~72 lattice nodes
+        // --- SCENE GEOMETRY DEFINITION ---
+        // A helper lambda to easily define our complex obstacles using global
+        // coordinates
+        auto is_wall = [](int x, int y) -> bool {
+            // 1. The Breakwater (Large central cylinder)
+            if ((x - 350) * (x - 350) + (y - 540) * (y - 540) <= 120 * 120)
+                return true;
 
-        // Define internal boundaries and sources on the grid
+            // 2. The Twin Scatterers (Two smaller cylinders)
+            if ((x - 750) * (x - 750) + (y - 250) * (y - 250) <= 90 * 90)
+                return true;
+            if ((x - 750) * (x - 750) + (y - 830) * (y - 830) <= 90 * 90)
+                return true;
+
+            // 3. The Collector (Massive secondary cylinder offset slightly to
+            // break symmetry)
+            if ((x - 1200) * (x - 1200) + (y - 560) * (y - 560) <= 140 * 140)
+                return true;
+
+            // 4. The Chicane (Staggered vertical baffles)
+            // Bottom wall upwards
+            if (x >= 1550 && x <= 1600 && y >= 0 && y <= 450)
+                return true;
+            // Top wall downwards
+            if (x >= 1700 && x <= 1750 && y >= 630 && y <= 1080)
+                return true;
+
+            return false;
+        };
+
+        // Map the geometry onto the distributed MPI grid
         for (int y = 1; y <= sim.local_Ny; ++y) {
-            int gy = y + sim.offset_y - 1;
+            int gy = y + sim.offset_y - 1; // Global Y coordinate
             for (int x = 0; x < Nx; ++x) {
-                // Default: fluid
-                sim.h_cell_type(x, y) = 0;
-
-                // Constant high-density source on the left boundary
-                if (x == 1) {
-                    sim.h_cell_type(x, y) = 2;
-                }
-                // Constant low-density sink on the right boundary
-                else if (x == Nx - 2) {
-                    sim.h_cell_type(x, y) = 3;
-                }
-                // Solid circular cylinder obstacle
-                else {
-                    double dx = x - cx;
-                    double dy = gy - cy;
-                    if (dx * dx + dy * dy <= radius * radius) {
-                        sim.h_cell_type(x, y) = 1; // Wall
+                sim.h_cell_type(x, y) = 0; // Default: fluid
+                if (y % 4 == 0)
+                    if (x < 10) {
+                        sim.h_cell_type(x, y) = 2; // Source zone (Inlet)
+                    } else if (x > Nx - 10) {
+                        sim.h_cell_type(x, y) = 3; // Sink zone (Outlet)
+                    } else if (is_wall(x, gy)) {
+                        sim.h_cell_type(x, y) = 1; // Solid Obstacle
                     }
-                }
             }
         }
-        // Copy cell configuration from host mirror to active device memory
+        // Push the configuration to device memory
         Kokkos::deep_copy(sim.cell_type, sim.h_cell_type);
 
-        size_t render_after_steps = 10;
-        size_t total_frames = 1200; // Produces 20 seconds of video at 60 FPS
+        // Render settings
+        size_t render_after_steps = 20;
+        size_t total_frames = 20 * 60; // 30 seconds of video at 60 FPS
 
-        FILE *ffmpeg = nullptr;
+        // skip the first 5 seconds
+        // sim.step(render_after_steps * 5 * 60);
 
-        // Rank 0 handles the FFmpeg encoding pipe
+        // Define 3 separate pipes for the 3 videos
+        FILE *ffmpeg_dir = nullptr;
+        FILE *ffmpeg_den = nullptr;
+        FILE *ffmpeg_spd = nullptr;
+
+        // Rank 0 handles the FFmpeg encoding pipes
         if (rank == 0) {
-            std::string cmd =
+            std::string cmd_base =
                 "ffmpeg -y -f rawvideo -pix_fmt abgr -s " + std::to_string(Nx) +
-                "x" + std::to_string(sim.global_Ny) +
-                " -r 60 -i - -c:v libx264 -pix_fmt yuv420p output.mp4";
+                "x" + std::to_string(Ny) +
+                " -r 60 -i - -c:v libx264 -preset fast -pix_fmt "
+                "yuv420p ";
 
-            ffmpeg = popen(cmd.c_str(), "w");
-            if (!ffmpeg) {
+            ffmpeg_dir =
+                popen((cmd_base + "output_1080p_direction.mp4").c_str(), "w");
+            ffmpeg_den =
+                popen((cmd_base + "output_1080p_density.mp4").c_str(), "w");
+            ffmpeg_spd =
+                popen((cmd_base + "output_1080p_speed.mp4").c_str(), "w");
+
+            if (!ffmpeg_dir || !ffmpeg_den || !ffmpeg_spd) {
                 std::cerr
-                    << "Error: Could not open pipe to FFmpeg. Confirm "
-                       "FFmpeg is installed and accessible in the PATH.\n";
+                    << "Error: Could not open one or more pipes to FFmpeg.\n";
             } else {
-                std::cout << "Starting wind-tunnel simulation. Exporting to "
-                             "output.mp4...\n";
+                std::cout << "Starting 1080p Obstacle Course simulation...\n";
+                std::cout
+                    << "Exporting 30 seconds of video to "
+                       "output_1080p_direction.mp4, output_1080p_density.mp4, "
+                       "and output_1080p_speed.mp4\n";
             }
         }
 
@@ -90,34 +120,58 @@ int main(int argc, char *argv[]) {
 
         // Main Simulation and Video Generation Loop
         for (size_t frame = 0; frame < total_frames; ++frame) {
+
+            // Advance the simulation
             sim.step(render_after_steps);
 
-            // Retrieve direction-based color mapping for visual variety
-            auto h_pixels = sim.get_global_rgb_direction();
+            // Fetch the visualisations
+            auto h_pixels_dir = sim.get_global_rgb_direction();
+            auto h_pixels_den = sim.get_global_rgb_density();
+            auto h_pixels_spd = sim.get_global_rgb_speed();
 
-            if (rank == 0 && ffmpeg) {
-                // Overlay cylinder, source, and sink positions visually on Rank
-                // 0
+            if (rank == 0 && ffmpeg_dir && ffmpeg_den && ffmpeg_spd) {
+                // Overlay the solid geometry and boundaries onto the video
+                // frames
                 for (int y = 0; y < Ny; ++y) {
                     for (int x = 0; x < Nx; ++x) {
-                        double dx = x - cx;
-                        double dy = y - cy;
-                        if (dx * dx + dy * dy <= radius * radius) {
-                            h_pixels(y * Nx + x) = 0x888888FF; // Grey Cylinder
-                        } else if (x == 1) {
-                            h_pixels(y * Nx + x) =
-                                0x00FF00FF; // Green Source line
-                        } else if (x == Nx - 2) {
-                            h_pixels(y * Nx + x) = 0xFF0000FF; // Red Sink line
+                        uint32_t overlay_color = 0;
+                        bool apply_overlay = false;
+
+                        if (is_wall(x, y)) {
+                            // Dark gray color for obstacles (0xRRGGBBAA format)
+                            overlay_color = 0x333333FF;
+                            apply_overlay = true;
+                        } else if (x < 10) {
+                            // Green Source line
+                            overlay_color = 0x00AA00FF;
+                            apply_overlay = true;
+                        } else if (x > Nx - 10) {
+                            // Red Sink line
+                            overlay_color = 0xAA0000FF;
+                            apply_overlay = true;
+                        }
+
+                        if (apply_overlay) {
+                            size_t idx = y * Nx + x;
+                            h_pixels_dir(idx) = overlay_color;
+                            h_pixels_den(idx) = overlay_color;
+                            h_pixels_spd(idx) = overlay_color;
                         }
                     }
                 }
 
-                // Push raw frame into the encoder pipe
-                size_t written = fwrite(h_pixels.data(), sizeof(uint32_t),
-                                        Nx * sim.global_Ny, ffmpeg);
-                if (written != static_cast<size_t>(Nx * sim.global_Ny)) {
-                    std::cerr << "Error writing frame to FFmpeg pipe!\n";
+                // Push raw frames into the respective encoder pipes
+                size_t written_dir = fwrite(
+                    h_pixels_dir.data(), sizeof(uint32_t), Nx * Ny, ffmpeg_dir);
+                size_t written_den = fwrite(
+                    h_pixels_den.data(), sizeof(uint32_t), Nx * Ny, ffmpeg_den);
+                size_t written_spd = fwrite(
+                    h_pixels_spd.data(), sizeof(uint32_t), Nx * Ny, ffmpeg_spd);
+
+                if (written_dir != static_cast<size_t>(Nx * Ny) ||
+                    written_den != static_cast<size_t>(Nx * Ny) ||
+                    written_spd != static_cast<size_t>(Nx * Ny)) {
+                    std::cerr << "Error writing frames to FFmpeg pipes!\n";
                 }
 
                 if (frame % 50 == 0) {
@@ -126,8 +180,10 @@ int main(int argc, char *argv[]) {
                 }
             }
 
-            // Simple error handling broadcast to exit if pipe fails
-            int error = (ffmpeg == nullptr && rank == 0) ? 1 : 0;
+            // Simple error handling broadcast to exit cleanly if any pipe fails
+            int error =
+                ((!ffmpeg_dir || !ffmpeg_den || !ffmpeg_spd) && rank == 0) ? 1
+                                                                           : 0;
             MPI_Bcast(&error, 1, MPI_INT, 0, MPI_COMM_WORLD);
             if (error)
                 break;
@@ -137,10 +193,18 @@ int main(int argc, char *argv[]) {
         std::chrono::duration<double> elapsed = end_time - start_time;
 
         if (rank == 0) {
-            if (ffmpeg) {
-                pclose(ffmpeg);
-                std::cout << "\nVideo export complete! Saved as output.mp4\n";
-            }
+            if (ffmpeg_dir)
+                pclose(ffmpeg_dir);
+            if (ffmpeg_den)
+                pclose(ffmpeg_den);
+            if (ffmpeg_spd)
+                pclose(ffmpeg_spd);
+
+            std::cout << "\nVideo export complete!\n"
+                      << "Saved as:\n"
+                      << "- output_1080p_direction.mp4\n"
+                      << "- output_1080p_density.mp4\n"
+                      << "- output_1080p_speed.mp4\n";
             std::cout << "Simulation and recording took: " << elapsed.count()
                       << " seconds.\n";
         }

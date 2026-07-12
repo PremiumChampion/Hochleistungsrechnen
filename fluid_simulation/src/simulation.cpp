@@ -52,6 +52,11 @@ void simulation::step(size_t num_iterations) {
     double local_max = get_max_speed(global_Nx, local_Ny, speed, max_speed);
     MPI_Allreduce(&local_max, &max_speed, 1, MPI_DOUBLE, MPI_MAX,
                   MPI_COMM_WORLD);
+    // uncomment for fixed scaling (eliminates flicker but also scales down)
+    // double step_max = 0.0;
+    // MPI_Allreduce(&local_max, &step_max, 1, MPI_DOUBLE, MPI_MAX,
+    //               MPI_COMM_WORLD);
+    // max_speed = std::max(max_speed, step_max); // Never let the scale drop
 
     speed_to_rgb(global_Nx, local_Ny, speed, rgb_speed, max_speed);
     velocity_dir_to_rgb(global_Nx, local_Ny, v, rgb_direction, max_speed);
@@ -59,7 +64,8 @@ void simulation::step(size_t num_iterations) {
 }
 
 void simulation::reset() {
-    initialize_lbm(global_Nx, global_Ny, local_Ny, offset_y, rho, v, f, f_next, InitialisationPattern::Empty);
+    initialize_lbm(global_Nx, global_Ny, local_Ny, offset_y, rho, v, f, f_next,
+                   InitialisationPattern::Empty);
 }
 
 double simulation::get_total_density() {

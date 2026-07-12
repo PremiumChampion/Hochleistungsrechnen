@@ -44,4 +44,4 @@ format_axes(axes[1], weak["tasks"].unique())
 axes[1].legend()
 
 plt.show()
-plt.savefig("centerline_profile.png", dpi=600)
+plt.savefig("benchmarks.png", dpi=600)

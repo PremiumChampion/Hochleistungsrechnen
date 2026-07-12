@@ -3,37 +3,38 @@
 
 Simulation1D::Simulation1D(int _Nx, int _Ny, double _omega,
                            InitialisationPattern pattern, bool _bounce)
-    : global_Nx(_Nx), omega(_omega), bounce(_bounce) 
-{
+    : global_Nx(_Nx),
+      omega(_omega),
+      bounce(_bounce) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
     local_Ny = _Ny / size;
     global_Ny = local_Ny * size;
-    offset_y  = rank * local_Ny;
+    offset_y = rank * local_Ny;
 
     // Fields: full x, local y + 2 ghost rows
-    speed         = ScalarField2D("speed",  global_Nx, local_Ny + 2);
-    rgb_speed     = PixelField("rgb_spd",   global_Nx * local_Ny);
-    rgb_direction = PixelField("rgb_dir",   global_Nx * local_Ny);
-    rgb_density   = PixelField("rgb_dens",  global_Nx * local_Ny);
-    cell_type     = CellTypeField("cells",  global_Nx, local_Ny + 2);
-    h_cell_type   = Kokkos::create_mirror_view(cell_type);
+    speed = ScalarField2D("speed", global_Nx, local_Ny + 2);
+    rgb_speed = PixelField("rgb_spd", global_Nx * local_Ny);
+    rgb_direction = PixelField("rgb_dir", global_Nx * local_Ny);
+    rgb_density = PixelField("rgb_dens", global_Nx * local_Ny);
+    cell_type = CellTypeField("cells", global_Nx, local_Ny + 2);
+    h_cell_type = Kokkos::create_mirror_view(cell_type);
     Kokkos::deep_copy(cell_type, 0);
 
     // Halo buffers: 3 D2Q9 directions per edge cell
-    send_top    = HaloBuf("send_top",    global_Nx, 3);
-    recv_top    = HaloBuf("recv_top",    global_Nx, 3);
+    send_top = HaloBuf("send_top", global_Nx, 3);
+    recv_top = HaloBuf("recv_top", global_Nx, 3);
     send_bottom = HaloBuf("send_bottom", global_Nx, 3);
     recv_bottom = HaloBuf("recv_bottom", global_Nx, 3);
 
-    h_send_top    = Kokkos::create_mirror_view(send_top);
-    h_recv_top    = Kokkos::create_mirror_view(recv_top);
+    h_send_top = Kokkos::create_mirror_view(send_top);
+    h_recv_top = Kokkos::create_mirror_view(recv_top);
     h_send_bottom = Kokkos::create_mirror_view(send_bottom);
     h_recv_bottom = Kokkos::create_mirror_view(recv_bottom);
 
-    initialize_lbm(global_Nx, global_Ny, local_Ny, offset_y,
-                   rho, v, f, f_next, pattern);
+    initialize_lbm(global_Nx, global_Ny, local_Ny, offset_y, rho, v, f, f_next,
+                   pattern);
 }
 
 void Simulation1D::step(size_t num_iterations) {
@@ -48,47 +49,57 @@ void Simulation1D::step(size_t num_iterations) {
         auto l_f_next = this->f_next;
 
         // ---- Halo exchange (y-direction only) ----
-        Kokkos::parallel_for("pack_top", global_Nx, KOKKOS_LAMBDA(int x) {
-            l_send_top(x, 0) = l_f(x, l_Ny, 4);  // S
-            l_send_top(x, 1) = l_f(x, l_Ny, 7);  // SW
-            l_send_top(x, 2) = l_f(x, l_Ny, 8);  // SE
-        });
-        Kokkos::parallel_for("pack_bottom", global_Nx, KOKKOS_LAMBDA(int x) {
-            l_send_bottom(x, 0) = l_f(x, 1, 2);  // N
-            l_send_bottom(x, 1) = l_f(x, 1, 5);  // NE
-            l_send_bottom(x, 2) = l_f(x, 1, 6);  // NW
-        });
+        Kokkos::parallel_for(
+            "pack_top", global_Nx, KOKKOS_LAMBDA(int x) {
+                l_send_top(x, 0) = l_f(x, l_Ny, 4); // S
+                l_send_top(x, 1) = l_f(x, l_Ny, 7); // SW
+                l_send_top(x, 2) = l_f(x, l_Ny, 8); // SE
+            });
+        Kokkos::parallel_for(
+            "pack_bottom", global_Nx, KOKKOS_LAMBDA(int x) {
+                l_send_bottom(x, 0) = l_f(x, 1, 2); // N
+                l_send_bottom(x, 1) = l_f(x, 1, 5); // NE
+                l_send_bottom(x, 2) = l_f(x, 1, 6); // NW
+            });
         Kokkos::fence();
-        Kokkos::deep_copy(h_send_top,    send_top);
+        Kokkos::deep_copy(h_send_top, send_top);
         Kokkos::deep_copy(h_send_bottom, send_bottom);
 
-        int top_neighbor    = (rank + 1) % size;
+        int top_neighbor = (rank + 1) % size;
         int bottom_neighbor = (rank - 1 + size) % size;
         if (bounce) {
-            if (rank == 0)         bottom_neighbor = MPI_PROC_NULL;
-            if (rank == size - 1)  top_neighbor    = MPI_PROC_NULL;
+            if (rank == 0)
+                bottom_neighbor = MPI_PROC_NULL;
+            if (rank == size - 1)
+                top_neighbor = MPI_PROC_NULL;
         }
 
         MPI_Request reqs[4];
-        MPI_Irecv(h_recv_top.data(),    global_Nx * 3, MPI_DOUBLE, top_neighbor,    0, MPI_COMM_WORLD, &reqs[0]);
-        MPI_Irecv(h_recv_bottom.data(), global_Nx * 3, MPI_DOUBLE, bottom_neighbor, 1, MPI_COMM_WORLD, &reqs[1]);
-        MPI_Isend(h_send_top.data(),    global_Nx * 3, MPI_DOUBLE, top_neighbor,    1, MPI_COMM_WORLD, &reqs[2]);
-        MPI_Isend(h_send_bottom.data(), global_Nx * 3, MPI_DOUBLE, bottom_neighbor, 0, MPI_COMM_WORLD, &reqs[3]);
+        MPI_Irecv(h_recv_top.data(), global_Nx * 3, MPI_DOUBLE, top_neighbor, 0,
+                  MPI_COMM_WORLD, &reqs[0]);
+        MPI_Irecv(h_recv_bottom.data(), global_Nx * 3, MPI_DOUBLE,
+                  bottom_neighbor, 1, MPI_COMM_WORLD, &reqs[1]);
+        MPI_Isend(h_send_top.data(), global_Nx * 3, MPI_DOUBLE, top_neighbor, 1,
+                  MPI_COMM_WORLD, &reqs[2]);
+        MPI_Isend(h_send_bottom.data(), global_Nx * 3, MPI_DOUBLE,
+                  bottom_neighbor, 0, MPI_COMM_WORLD, &reqs[3]);
         MPI_Waitall(4, reqs, MPI_STATUSES_IGNORE);
 
-        Kokkos::deep_copy(recv_top,    h_recv_top);
+        Kokkos::deep_copy(recv_top, h_recv_top);
         Kokkos::deep_copy(recv_bottom, h_recv_bottom);
 
-        Kokkos::parallel_for("unpack_top", global_Nx, KOKKOS_LAMBDA(int x) {
-            l_f(x, l_Ny + 1, 4) = l_recv_top(x, 0);
-            l_f(x, l_Ny + 1, 7) = l_recv_top(x, 1);
-            l_f(x, l_Ny + 1, 8) = l_recv_top(x, 2);
-        });
-        Kokkos::parallel_for("unpack_bottom", global_Nx, KOKKOS_LAMBDA(int x) {
-            l_f(x, 0, 2) = l_recv_bottom(x, 0);
-            l_f(x, 0, 5) = l_recv_bottom(x, 1);
-            l_f(x, 0, 6) = l_recv_bottom(x, 2);
-        });
+        Kokkos::parallel_for(
+            "unpack_top", global_Nx, KOKKOS_LAMBDA(int x) {
+                l_f(x, l_Ny + 1, 4) = l_recv_top(x, 0);
+                l_f(x, l_Ny + 1, 7) = l_recv_top(x, 1);
+                l_f(x, l_Ny + 1, 8) = l_recv_top(x, 2);
+            });
+        Kokkos::parallel_for(
+            "unpack_bottom", global_Nx, KOKKOS_LAMBDA(int x) {
+                l_f(x, 0, 2) = l_recv_bottom(x, 0);
+                l_f(x, 0, 5) = l_recv_bottom(x, 1);
+                l_f(x, 0, 6) = l_recv_bottom(x, 2);
+            });
         Kokkos::fence();
 
         double comm_time = step_timer.seconds();
@@ -105,13 +116,16 @@ void Simulation1D::step(size_t num_iterations) {
         Kokkos::fence();
 
         total_compute_time += step_timer.seconds();
-        total_comm_time    += comm_time;
+        total_comm_time += comm_time;
     }
 
     // Post-step visualization prep
     velocity_to_speed(global_Nx, local_Ny, v, speed);
     double local_max = get_max_speed(global_Nx, local_Ny, speed, max_speed);
-    MPI_Allreduce(&local_max, &max_speed, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+    // double step_max = 0.0;
+    // MPI_Allreduce(&local_max, &step_max, 1, MPI_DOUBLE, MPI_MAX,
+    //               MPI_COMM_WORLD);
+    // max_speed = std::max(max_speed, step_max); // Never let the scale drop
     speed_to_rgb(global_Nx, local_Ny, speed, rgb_speed, max_speed);
     velocity_dir_to_rgb(global_Nx, local_Ny, v, rgb_direction, max_speed);
     density_to_rgb(global_Nx, local_Ny, rho, rgb_density);
@@ -125,14 +139,14 @@ HostPixelField Simulation1D::get_global_rgb_speed() {
     auto local_rgb_host = Kokkos::create_mirror_view(rgb_speed);
     Kokkos::deep_copy(local_rgb_host, rgb_speed);
     MPI_Gather(local_rgb_host.data(), local_rgb_host.extent(0), MPI_UINT32_T,
-               global_rgb.data(), local_rgb_host.extent(0), MPI_UINT32_T,
-               0, MPI_COMM_WORLD);
+               global_rgb.data(), local_rgb_host.extent(0), MPI_UINT32_T, 0,
+               MPI_COMM_WORLD);
     return global_rgb;
 }
 
-
 void Simulation1D::reset() {
-    initialize_lbm(global_Nx, global_Ny, local_Ny, offset_y, rho, v, f, f_next, InitialisationPattern::Empty);
+    initialize_lbm(global_Nx, global_Ny, local_Ny, offset_y, rho, v, f, f_next,
+                   InitialisationPattern::Empty);
 }
 
 double Simulation1D::get_total_density() {
