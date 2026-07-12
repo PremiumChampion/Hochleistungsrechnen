@@ -324,7 +324,7 @@ void Simulation::step(size_t num_iterations) {
     if (max_speed <= 1e-8) {
         max_speed = current_global_max;
     } else {
-        double alpha = 1.0 / 180.0; // Approx 3 seconds averaging at 60 FPS
+        double alpha = 1.0 / 30.0; // Approx .5 seconds averaging at 60 FPS
         max_speed = max_speed * (1.0 - alpha) + current_global_max * alpha;
     }
     

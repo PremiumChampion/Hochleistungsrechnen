@@ -272,15 +272,15 @@ void apply_sources(DistFuncD2Q9 f, CellTypeField cell_type, int local_Nx, int lo
             const double w[9] = {4./9., 1./9., 1./9., 1./9., 1./9., 1./36., 1./36., 1./36., 1./36.};
             
             if (type == 2) {
-                // SOURCE: Force a constant high density (rho = 1.3), velocity = 0
+                // SOURCE: Force a constant high density (rho = 1.1), velocity = 0
                 // This will push fluid outward into the domain.
                 for (int i = 0; i < 9; ++i)
-                    f(x, y, i) = w[i] * 1.3;
+                    f(x, y, i) = w[i] * 1.1;
             } else if (type == 3) {
-                // SINK: Force a constant low density (rho = 0.7), velocity = 0
+                // SINK: Force a constant low density (rho = 0.9), velocity = 0
                 // This creates a pressure vacuum that pulls fluid in.
                 for (int i = 0; i < 9; ++i)
-                    f(x, y, i) = w[i] * 0.7;
+                    f(x, y, i) = w[i] * 0.9;
             }
         });
 }
