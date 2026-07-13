@@ -11,5 +11,5 @@
     //     "4"
     // ],
     "cmake.parallelJobs": 4,
-    "cmake.exportCompileCommandsFile": true
+    "cmake.exportCompileCommandsFile": true,
 }
