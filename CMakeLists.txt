@@ -76,7 +76,9 @@ if(NOT Kokkos_FOUND)
 
     FetchContent_MakeAvailable(kokkos)
 
-    kokkos_compilation(GLOBAL)
+    if(USE_CUDA)
+      kokkos_compilation(GLOBAL)
+    endif()
 endif()
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_BUILD_TYPE}")
