@@ -143,7 +143,7 @@ void initialize_lbm(int global_Nx, int global_Ny, int local_Nx, int local_Ny,
                 const double epsilon = 0.05;
                 const double current_rho = 1.0;
 
-                int gx = offset_x + (x - 1);
+                // int gx = offset_x + (x - 1);
                 int gy = offset_y + (y - 1);
 
                 // Shear wave: X-velocity varies vertically, commonly used for

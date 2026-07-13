@@ -23,8 +23,12 @@ sudo apt-get install -y cmake build-essential openmpi-bin libopenmpi-dev ffmpeg 
 The project uses CMake to fetch and configure external dependencies (Eigen3, Kokkos, and SDL3) automatically.
 
 ```bash
-# Configure the build directory (Release mode is recommended for performance)
-cmake -B build -DCMAKE_BUILD_TYPE=Release
+# Configure the build directory
+# USE_CUDA=ON 
+#       if Kokkos is installed on your system this does not have any effect
+#       enable cuda with the AMPERE86 architecture
+#       change these values in the CMakeLists.txt for your build
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DUSE_CUDA=ON
 
 # Compile all targets
 cmake --build build -j$(nproc)

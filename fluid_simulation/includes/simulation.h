@@ -26,6 +26,7 @@ class Simulation {
     int dims[2];        // {px, py}
     int coords[2];      // this rank's {x, y} in the grid
     MPI_Comm cart_comm; // the communication "interface/backbone"
+    bool cuda_aware_mpi = false;
 
     // Neighbor ranks (8 neighbors for D2Q9 diagonal streaming)
     int nbr_n, nbr_s, nbr_e, nbr_w;

@@ -89,6 +89,13 @@ int main(int argc, char *argv[]) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
+    if (size > 1) {
+        if (rank == 0)
+            std::cerr << "Error: 'serial' only supports 1 MPI rank.\n";
+        MPI_Finalize();
+        return 1;
+    }
+
     {
         if (argc < 3) {
             if (rank == 0) {

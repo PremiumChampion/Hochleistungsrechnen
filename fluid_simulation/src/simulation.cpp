@@ -69,6 +69,20 @@ Simulation::Simulation(int _Nx, int _Ny, double _omega,
     h_send_corner = Kokkos::create_mirror_view(send_corner);
     h_recv_corner = Kokkos::create_mirror_view(recv_corner);
 
+    // Check for CUDA-aware MPI support dynamically (only runs once)
+
+#if defined(MPIX_CUDA_AWARE_SUPPORT) && MPIX_CUDA_AWARE_SUPPORT
+    cuda_aware_mpi = MPIX_Query_cuda_support();
+#else
+    cuda_aware_mpi = false;
+#endif
+    if (rank == 0) {
+        std::cout << "CUDA-aware MPI: "
+                  << (cuda_aware_mpi ? "Enabled (Direct GPU Comm)"
+                                     : "Disabled (Using Host Buffers)")
+                  << "\n";
+    }
+
     // Initialize the LBM fields to the equilibrium state or a specific pattern
     initialize_lbm(global_Nx, global_Ny, local_Nx, local_Ny, offset_x, offset_y,
                    rho, v, f, f_next, pattern);
@@ -76,7 +90,9 @@ Simulation::Simulation(int _Nx, int _Ny, double _omega,
 
 Simulation::~Simulation() {
     // Clean up the custom MPI communicator
-    MPI_Comm_free(&cart_comm);
+    if (cart_comm != MPI_COMM_NULL) {
+        MPI_Comm_free(&cart_comm);
+    }
 }
 
 // MPI Cartesian Topology Setup
@@ -207,24 +223,7 @@ void Simulation::halo_exchange() {
     // Wait for packing kernels to finish
     Kokkos::fence();
 
-    // Step 2: Check for CUDA-aware MPI support dynamically (only runs once)
-    // static variables inside a method only gets initialized once
-    static bool checked_cuda_aware = false;
-    static bool cuda_aware_mpi = false;
-    if (!checked_cuda_aware) {
-#if defined(MPIX_CUDA_AWARE_SUPPORT) && MPIX_CUDA_AWARE_SUPPORT
-        cuda_aware_mpi = MPIX_Query_cuda_support();
-#endif
-        checked_cuda_aware = true;
-        if (rank == 0) {
-            std::cout << "CUDA-aware MPI: "
-                      << (cuda_aware_mpi ? "Enabled (Direct GPU Comm)"
-                                         : "Disabled (Using Host Buffers)")
-                      << "\n";
-        }
-    }
-
-    // Step 3: Issue Non-Blocking MPI Sends & Receives
+    // Step 2: Issue Non-Blocking MPI Sends & Receives
     MPI_Request reqs[16];
     int n_req = 0;
 
@@ -267,14 +266,14 @@ void Simulation::halo_exchange() {
         }
     } else {
         // Fallback: Staging via Host Buffers (Legacy / CPU fallback)
-        // 3.1 Copy packed GPU buffers to CPU
+        // 2.1 Copy packed GPU buffers to CPU
         Kokkos::deep_copy(h_send_n, send_n);
         Kokkos::deep_copy(h_send_s, send_s);
         Kokkos::deep_copy(h_send_e, send_e);
         Kokkos::deep_copy(h_send_w, send_w);
         Kokkos::deep_copy(h_send_corner, send_corner);
 
-        // 3.2 Transmit via CPU memory
+        // 2.2 Transmit via CPU memory
         issue_halo(nbr_n, 0, 1, h_send_n.data(), h_recv_n.data(), local_Nx * 3);
         issue_halo(nbr_s, 1, 0, h_send_s.data(), h_recv_s.data(), local_Nx * 3);
         issue_halo(nbr_e, 2, 3, h_send_e.data(), h_recv_e.data(), local_Ny * 3);
@@ -283,15 +282,15 @@ void Simulation::halo_exchange() {
         // Host mirrors can safely be dereferenced by the CPU using
         // '&h_send_corner(0)'
         issue_halo(nbr_ne, 4, 5, &h_send_corner(0), &h_recv_corner(0), 1);
-        issue_halo(nbr_nw, 5, 4, &h_send_corner(1), &h_recv_corner(1), 1);
-        issue_halo(nbr_se, 6, 7, &h_send_corner(2), &h_recv_corner(2), 1);
-        issue_halo(nbr_sw, 7, 6, &h_send_corner(3), &h_recv_corner(3), 1);
+        issue_halo(nbr_sw, 5, 4, &h_send_corner(3), &h_recv_corner(3), 1);
+        issue_halo(nbr_nw, 6, 7, &h_send_corner(1), &h_recv_corner(1), 1);
+        issue_halo(nbr_se, 7, 6, &h_send_corner(2), &h_recv_corner(2), 1);
 
         if (n_req > 0) {
             MPI_Waitall(n_req, reqs, MPI_STATUSES_IGNORE);
         }
 
-        // 3.3 Copy received CPU buffers back to GPU
+        // 2.3 Copy received CPU buffers back to GPU
         Kokkos::deep_copy(recv_n, h_recv_n);
         Kokkos::deep_copy(recv_s, h_recv_s);
         Kokkos::deep_copy(recv_e, h_recv_e);
@@ -299,7 +298,7 @@ void Simulation::halo_exchange() {
         Kokkos::deep_copy(recv_corner, h_recv_corner);
     }
 
-    // Step 4: Unpack received edge data into our ghost cells (on GPU)
+    // Step 3: Unpack received edge data into our ghost cells (on GPU)
     Kokkos::parallel_for(
         "unpack_n", local_Nx, KOKKOS_LAMBDA(int x) {
             l_f(x + 1, l_Ny + 1, 4) = l_recv_n(x, 0);

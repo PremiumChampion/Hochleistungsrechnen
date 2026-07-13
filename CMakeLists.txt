@@ -61,18 +61,26 @@ if(NOT Kokkos_FOUND)
 
     # Enable modern CMake CUDA compilation
     # set(Kokkos_ENABLE_COMPILE_AS_CMAKE_LANGUAGE ON CACHE BOOL "Compile as CUDA" FORCE)
-    set(Kokkos_ENABLE_CUDA ON CACHE BOOL "Enable CUDA" FORCE)
+    # set(Kokkos_ENABLE_CUDA ON CACHE BOOL "Enable CUDA" FORCE)
     # set(Kokkos_ENABLE_DEBUG ON CACHE BOOL "Enable DEBUG" FORCE)
-    # # Target RTX 3070 GPU (Ampere86)
-    set(Kokkos_ARCH_AMPERE86 ON CACHE BOOL "RTX 3070 Architecture" FORCE)
+    # set(Kokkos_ARCH_AMPERE86 ON CACHE BOOL "RTX 3070 Architecture" FORCE)
+    
+    option(USE_CUDA "Enable CUDA backend for Kokkos" OFF)
+    if(USE_CUDA)
+        set(Kokkos_ENABLE_CUDA ON CACHE BOOL "Enable Cuda" FORCE)
+        # Target RTX 3070 GPU (Ampere86)
+        set(Kokkos_ARCH_AMPERE86 ON CACHE BOOL "RTX 3070 Architecture" FORCE)
+    else()
+        set(Kokkos_ENABLE_SERIAL ON CACHE BOOL "Serial Backend" FORCE)
+    endif()
 
     FetchContent_MakeAvailable(kokkos)
 
     kokkos_compilation(GLOBAL)
 endif()
 
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/$<CONFIGURATION>")
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/$<CONFIGURATION>")
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_BUILD_TYPE}")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_BUILD_TYPE}")
 
 
 include(FetchContent)
@@ -82,25 +90,12 @@ set(SDL_STATIC ON)
 set(BUILD_SHARED_LIBS OFF)
 set(SDLIMAGE_DEPS_SHARED OFF)
 set(SDLNET_DEPS_SHARED OFF)
-# set(SDL_STATIC_PIC ON)
 
 FetchContent_Declare(
   sdl3
   GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
   GIT_TAG        badbf8da4ee72b3ef599c721ffc9899e8d7c8d90 # release-3.2.26
 )
-
-# FetchContent_Declare(
-#   sdl3_image
-#   GIT_REPOSITORY https://github.com/libsdl-org/SDL_image.git
-#   GIT_TAG        11154afb7855293159588b245b446a4ef09e574f # release-3.2.4
-# )
-
-# FetchContent_Declare(
-#   sdl3_net
-#   GIT_REPOSITORY https://github.com/libsdl-org/SDL_net.git
-#   GIT_TAG        c2757cbbcbed2fd8ed98b79c66447f292221c81c # main
-# )
 
 FetchContent_MakeAvailable(sdl3)
 
