@@ -268,10 +268,11 @@ int main(int argc, char *argv[]) {
                 MPI_Bcast(global_cells.data(), state.Nx * state.Ny, MPI_INT, 0,
                           MPI_COMM_WORLD);
                 for (int y = 1; y <= sim->local_Ny; ++y) {
-                    for (int x = 0; x < state.Nx; ++x) {
-                        int global_y = y + sim->offset_y - 1;
+                    int global_y = y + sim->offset_y - 1;
+                    for (int x = 1; x <= sim->local_Nx; ++x) {
+                        int global_x = x + sim->offset_x - 1;
                         sim->h_cell_type(x, y) =
-                            global_cells[global_y * state.Nx + x];
+                            global_cells[global_y * state.Nx + global_x];
                     }
                 }
                 Kokkos::deep_copy(sim->cell_type, sim->h_cell_type);

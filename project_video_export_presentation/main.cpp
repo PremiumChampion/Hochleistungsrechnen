@@ -62,16 +62,18 @@ int main(int argc, char *argv[]) {
         // Map the geometry onto the distributed MPI grid
         for (int y = 1; y <= sim.local_Ny; ++y) {
             int gy = y + sim.offset_y - 1; // Global Y coordinate
-            for (int x = 0; x < Nx; ++x) {
-                sim.h_cell_type(x, y) = 0; // Default: fluid
-                if (y % 4 == 0)
-                    if (x < 10) {
+            for (int x = 1; x <= sim.local_Nx; ++x) {
+                int gx = x + sim.offset_x - 1; // Global X coordinate
+                sim.h_cell_type(x, y) = 0;     // Default: fluid
+                if (y % 4 == 0) {
+                    if (gx < 10) {
                         sim.h_cell_type(x, y) = 2; // Source zone (Inlet)
-                    } else if (x > Nx - 10) {
+                    } else if (gx > Nx - 10) {
                         sim.h_cell_type(x, y) = 3; // Sink zone (Outlet)
-                    } else if (is_wall(x, gy)) {
+                    } else if (is_wall(gx, gy)) {
                         sim.h_cell_type(x, y) = 1; // Solid Obstacle
                     }
+                }
             }
         }
         // Push the configuration to device memory

@@ -1,5 +1,7 @@
 {
-    "cmake.configureArgs": [],
+    "cmake.configureArgs": [
+        "-DUSE_CUDA=ON"
+    ],
     "cmake.debugConfig": {
         "args": [
             "--kokkos-device-id=0"

@@ -10,7 +10,7 @@ Before compiling, ensure your system has the following dependencies installed:
 *   **CMake**: Version 3.14 or higher.
 *   **MPI**: An MPI implementation such as OpenMPI or MPICH.
 *   **FFmpeg**: Required at runtime for video-export targets to pipe raw pixel data into MP4 containers.
-*   **SDL3 System Libraries**: Depending on your Linux distribution, you may need development packages for your window manager (e.g., Wayland or X11 development headers) to run the interactive targets.
+*   **SDL3 System Libraries**: Depending on your Linux distribution, you may need development packages for your window manager (e.g., Wayland or X11 development headers) to run the interactive targets. [deps](https://github.com/libsdl-org/SDL/blob/main/docs/README-linux.md#build-dependencies)
 
 ### Installing Prerequisites (Ubuntu/Debian example)
 ```bash

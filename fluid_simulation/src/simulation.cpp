@@ -180,32 +180,36 @@ void Simulation::halo_exchange() {
     // 7: SW, 8: SE
 
     // North edge sends Southward moving particles (4, 7, 8)
+    // North edge sends Northward moving particles (2, 5, 6)
     Kokkos::parallel_for(
         "pack_n", l_Nx, KOKKOS_LAMBDA(int x) {
-            l_send_n(x, 0) = l_f(x + 1, l_Ny, 4);
-            l_send_n(x, 1) = l_f(x + 1, l_Ny, 7);
-            l_send_n(x, 2) = l_f(x + 1, l_Ny, 8);
+            l_send_n(x, 0) = l_f(x + 1, l_Ny, 2);
+            l_send_n(x, 1) = l_f(x + 1, l_Ny, 5);
+            l_send_n(x, 2) = l_f(x + 1, l_Ny, 6);
         });
-    // South edge sends Northward moving particles (2, 5, 6)
+
+    // South edge sends Southward moving particles (4, 7, 8)
     Kokkos::parallel_for(
         "pack_s", l_Nx, KOKKOS_LAMBDA(int x) {
-            l_send_s(x, 0) = l_f(x + 1, 1, 2);
-            l_send_s(x, 1) = l_f(x + 1, 1, 5);
-            l_send_s(x, 2) = l_f(x + 1, 1, 6);
+            l_send_s(x, 0) = l_f(x + 1, 1, 4);
+            l_send_s(x, 1) = l_f(x + 1, 1, 7);
+            l_send_s(x, 2) = l_f(x + 1, 1, 8);
         });
-    // East edge sends Westward moving particles (3, 6, 7)
+
+    // East edge sends Eastward moving particles (1, 5, 8)
     Kokkos::parallel_for(
         "pack_e", l_Ny, KOKKOS_LAMBDA(int y) {
-            l_send_e(y, 0) = l_f(l_Nx, y + 1, 3);
-            l_send_e(y, 1) = l_f(l_Nx, y + 1, 6);
-            l_send_e(y, 2) = l_f(l_Nx, y + 1, 7);
+            l_send_e(y, 0) = l_f(l_Nx, y + 1, 1);
+            l_send_e(y, 1) = l_f(l_Nx, y + 1, 5);
+            l_send_e(y, 2) = l_f(l_Nx, y + 1, 8);
         });
-    // West edge sends Eastward moving particles (1, 5, 8)
+
+    // West edge sends Westward moving particles (3, 6, 7)
     Kokkos::parallel_for(
         "pack_w", l_Ny, KOKKOS_LAMBDA(int y) {
-            l_send_w(y, 0) = l_f(1, y + 1, 1);
-            l_send_w(y, 1) = l_f(1, y + 1, 5);
-            l_send_w(y, 2) = l_f(1, y + 1, 8);
+            l_send_w(y, 0) = l_f(1, y + 1, 3);
+            l_send_w(y, 1) = l_f(1, y + 1, 6);
+            l_send_w(y, 2) = l_f(1, y + 1, 7);
         });
     // Corners send diagonal particles
     Kokkos::parallel_for(
@@ -249,16 +253,13 @@ void Simulation::halo_exchange() {
         // use pointer arithmetic (`data() + 0`)
         // otherwise CPU to dereferences index 0 of the gpu memory, which
         // results in a Segfault.
-        // NE and SW are opposites:
-        issue_halo(nbr_ne, 4, 5, send_corner.data() + 0, recv_corner.data() + 0,
+        issue_halo(nbr_ne, 4, 7, send_corner.data() + 0, recv_corner.data() + 0,
                    1);
-        issue_halo(nbr_sw, 5, 4, send_corner.data() + 3, recv_corner.data() + 3,
+        issue_halo(nbr_nw, 5, 6, send_corner.data() + 1, recv_corner.data() + 1,
                    1);
-
-        // NW and SE are opposites:
-        issue_halo(nbr_nw, 6, 7, send_corner.data() + 1, recv_corner.data() + 1,
+        issue_halo(nbr_se, 6, 5, send_corner.data() + 2, recv_corner.data() + 2,
                    1);
-        issue_halo(nbr_se, 7, 6, send_corner.data() + 2, recv_corner.data() + 2,
+        issue_halo(nbr_sw, 7, 4, send_corner.data() + 3, recv_corner.data() + 3,
                    1);
 
         if (n_req > 0) {
@@ -281,10 +282,10 @@ void Simulation::halo_exchange() {
 
         // Host mirrors can safely be dereferenced by the CPU using
         // '&h_send_corner(0)'
-        issue_halo(nbr_ne, 4, 5, &h_send_corner(0), &h_recv_corner(0), 1);
-        issue_halo(nbr_sw, 5, 4, &h_send_corner(3), &h_recv_corner(3), 1);
-        issue_halo(nbr_nw, 6, 7, &h_send_corner(1), &h_recv_corner(1), 1);
-        issue_halo(nbr_se, 7, 6, &h_send_corner(2), &h_recv_corner(2), 1);
+        issue_halo(nbr_ne, 4, 7, &h_send_corner(0), &h_recv_corner(0), 1);
+        issue_halo(nbr_nw, 5, 6, &h_send_corner(1), &h_recv_corner(1), 1);
+        issue_halo(nbr_se, 6, 5, &h_send_corner(2), &h_recv_corner(2), 1);
+        issue_halo(nbr_sw, 7, 4, &h_send_corner(3), &h_recv_corner(3), 1);
 
         if (n_req > 0) {
             MPI_Waitall(n_req, reqs, MPI_STATUSES_IGNORE);
