@@ -65,7 +65,7 @@ int main(int argc, char *argv[]) {
         double analytical_nu = (1.0 / 3.0) * (1.0 / omega - 0.5);
 
         int steps = 1000;
-        sim.step(100);
+        // sim.step(100);
 
         auto global_v = sim.get_global_velocity();
         double initial_amp = 0;

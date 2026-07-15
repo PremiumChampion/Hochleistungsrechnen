@@ -67,16 +67,17 @@ if(NOT Kokkos_FOUND)
     
     option(USE_CUDA "Enable CUDA backend for Kokkos" OFF)
     if(USE_CUDA)
-        set(Kokkos_ENABLE_CUDA ON CACHE BOOL "Enable Cuda" FORCE)
+    set(Kokkos_ENABLE_CUDA ON CACHE BOOL "Enable Cuda" FORCE)
         # Target RTX 3070 GPU (Ampere86)
         set(Kokkos_ARCH_AMPERE86 ON CACHE BOOL "RTX 3070 Architecture" FORCE)
-    else()
+        else()
         set(Kokkos_ENABLE_SERIAL ON CACHE BOOL "Serial Backend" FORCE)
-    endif()
-
+        endif()
+        
     FetchContent_MakeAvailable(kokkos)
-
-    if(USE_CUDA)
+    
+    option(NO_GLOBAL_KOKKOS "Disable global kokkos compilation" OFF)
+    if(USE_CUDA && NOT NO_GLOBAL_KOKKOS)
       kokkos_compilation(GLOBAL)
     endif()
 endif()
