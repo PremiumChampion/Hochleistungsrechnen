@@ -1,8 +1,8 @@
-cmake_minimum_required(VERSION 3.24)
+cmake_minimum_required(VERSION 3.14)
 if(POLICY CMP0135)
     cmake_policy(SET CMP0135 NEW)
 endif()
-project(lattice-bolzman-with-kokkos-and-mpi LANGUAGES C CXX VERSION 0.1)
+project(my-fantastic-simulation-code LANGUAGES C CXX VERSION 0.1)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -49,23 +49,6 @@ if(NOT Eigen3_FOUND)
     endif()
 endif()
 
-include(CheckLanguage)
-check_language(CUDA)
-
-if(CMAKE_CUDA_COMPILER)
-    set(CUDA_DETECTED ON)
-else()
-    set(CUDA_DETECTED OFF)
-endif()
-
-option(USE_CUDA "Enable CUDA backend for Kokkos" ${CUDA_DETECTED})
-
-if(USE_CUDA)
-    enable_language(CUDA)
-    # auto select gpu arch    
-    set(CMAKE_CUDA_ARCHITECTURES native)
-endif()
-
 find_package(Kokkos 4.7.03)
 if(NOT Kokkos_FOUND)
     include(FetchContent)
@@ -82,6 +65,7 @@ if(NOT Kokkos_FOUND)
     # set(Kokkos_ENABLE_DEBUG ON CACHE BOOL "Enable DEBUG" FORCE)
     # set(Kokkos_ARCH_AMPERE86 ON CACHE BOOL "RTX 3070 Architecture" FORCE)
     
+    option(USE_CUDA "Enable CUDA backend for Kokkos" OFF)
     if(USE_CUDA)
         set(Kokkos_ENABLE_CUDA ON CACHE BOOL "Enable Cuda" FORCE)
         # Target RTX 3070 GPU (Ampere86)
@@ -92,6 +76,9 @@ if(NOT Kokkos_FOUND)
 
     FetchContent_MakeAvailable(kokkos)
 
+    if(USE_CUDA)
+      kokkos_compilation(GLOBAL)
+    endif()
 endif()
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_BUILD_TYPE}")
@@ -124,5 +111,6 @@ add_subdirectory(milestone04)
 add_subdirectory(milestone05)
 add_subdirectory(milestone06)
 add_subdirectory(interactive)
+add_subdirectory(validation)
 add_subdirectory(benchmark)
 add_subdirectory(tests)

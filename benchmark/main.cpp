@@ -45,99 +45,130 @@ int main(int argc, char *argv[]) {
                 csv_file = argv[++i];
         }
 
-        if (rank == 0) {
-            std::cout << "=== LBM Benchmark ===\n";
-            std::cout << "Grid: " << Nx << "x" << Ny << " | Tasks: " << size
-                      << " | Dim: " << dim << "D"
-                      << " | Steps: " << bench_steps
-                      << " | Scaling: " << scaling_type << "\n";
-            std::cout << "Starting warmup (100 steps)...\n";
-        }
+        // Loop twice: once forcing host buffers, once utilizing direct GPU
+        // comms (if available)
+        bool buffer_options[] = {true, false};
+        for (bool use_host_buffers : buffer_options) {
 
-        // Shared variables for results
-        double total_mass = 0, total_ke = 0;
-        double compute_time = 0, comm_time = 0, runtime = 0;
+            // Shared variables for results
+            double total_mass = 0, total_ke = 0;
+            double compute_time = 0, comm_time = 0, runtime = 0;
 
-        Simulation sim{
-            Nx,    Ny,
-            omega, InitialisationPattern::Droplet,
-            true,  dim == 1 ? DecompType::DECOMP_1D : DecompType::DECOMP_2D};
+            Simulation sim{
+                Nx,
+                Ny,
+                omega,
+                InitialisationPattern::Droplet,
+                true,
+                dim == 1 ? DecompType::DECOMP_1D : DecompType::DECOMP_2D};
 
-        // Warm-up to bypass JIT latency and cache warming
-        sim.step(100);
-        Kokkos::fence();
-        MPI_Barrier(MPI_COMM_WORLD);
-        sim.total_compute_time = 0.0;
-        sim.total_comm_time = 0.0;
-
-        if (rank == 0)
-            std::cout << "Benchmarking " << bench_steps << " steps...\n";
-
-        Kokkos::Timer timer;
-        sim.step(bench_steps);
-        Kokkos::fence();
-        MPI_Barrier(MPI_COMM_WORLD);
-        runtime = timer.seconds();
-
-        total_mass = sim.get_total_density();
-        total_ke = sim.get_total_kinetic_energy();
-        compute_time = sim.total_compute_time;
-        comm_time = sim.total_comm_time;
-
-        if (rank == 0) {
-            // Calculate Performance Metrics
-            double mlups =
-                (static_cast<double>(Nx) * Ny * bench_steps) / (runtime * 1e6);
-            double compute_percent = (compute_time / runtime) * 100.0;
-            double comm_percent = (comm_time / runtime) * 100.0;
-            double other_percent = 100.0 - compute_percent - comm_percent;
-
-            // Strong scaling efficiency (relative to 1 task)
-            // This will be computed in post-processing from CSV
-            double cells_per_task = static_cast<double>(Nx) * Ny / size;
-            double mlups_per_task = mlups / size;
-
-            std::cout << "\n--- Final Results ---\n";
-            std::cout << "Total mass: " << total_mass << "\n";
-            std::cout << "Total kinetic energy: " << total_ke << "\n";
-            std::cout << "Runtime: " << runtime << " s\n";
-            std::cout << "Calculation Time (GPU): " << compute_time << " s ("
-                      << compute_percent << "%)\n";
-            std::cout << "Networking Time (MPI): " << comm_time << " s ("
-                      << comm_percent << "%)\n";
-            std::cout << "Other overhead: "
-                      << (runtime - compute_time - comm_time) << " s ("
-                      << other_percent << "%)\n";
-            std::cout << "Performance: " << mlups << " MLUPS\n";
-            std::cout << "Performance per task: " << mlups_per_task
-                      << " MLUPS/task\n";
-            std::cout << "Cells per task: " << cells_per_task << "\n";
-
-            // Write CSV (append mode)
-            std::ofstream outfile;
-            bool file_exists = std::ifstream(csv_file).good();
-            outfile.open(csv_file, std::ios::app);
-
-            if (!file_exists) {
-                outfile << "scaling_type,dim,Nx,Ny,tasks,steps,omega,"
-                        << "runtime,compute_time,comm_time,other_time,"
-                        << "compute_pct,comm_pct,other_pct,"
-                        << "mlups,mlups_per_task,cells_per_task,"
-                        << "total_mass,total_ke\n";
+            // If we try to run without host buffers but the MPI implementation
+            // doesn't support it, skip.
+            if (!use_host_buffers && !sim.cuda_aware_mpi) {
+                if (rank == 0) {
+                    std::cout
+                        << "\nSkipping direct GPU communication benchmark "
+                           "because CUDA-aware MPI is not available.\n";
+                }
+                continue;
             }
 
-            outfile << scaling_type << "," << dim << "," << Nx << "," << Ny
-                    << "," << size << "," << bench_steps << "," << omega << ","
-                    << runtime << "," << compute_time << "," << comm_time << ","
-                    << (runtime - compute_time - comm_time) << ","
-                    << compute_percent << "," << comm_percent << ","
-                    << other_percent << "," << mlups << "," << mlups_per_task
-                    << "," << cells_per_task << "," << total_mass << ","
-                    << total_ke << "\n";
-            outfile.close();
+            // Force the fallback host buffer path if requested
+            if (use_host_buffers) {
+                sim.cuda_aware_mpi = false;
+            }
 
-            std::cout << "\nResults appended to " << csv_file << "\n";
-        }
+            if (rank == 0) {
+                std::cout << "\n=== LBM Benchmark ("
+                          << (use_host_buffers ? "Host Buffers"
+                                               : "Direct GPU Comm")
+                          << ") ===\n";
+                std::cout << "Grid: " << Nx << "x" << Ny << " | Tasks: " << size
+                          << " | Dim: " << dim << "D"
+                          << " | Steps: " << bench_steps
+                          << " | Scaling: " << scaling_type << "\n";
+                std::cout << "Starting warmup (100 steps)...\n";
+            }
+
+            // Warm-up to bypass JIT latency and cache warming
+            sim.step(100);
+            Kokkos::fence();
+            MPI_Barrier(MPI_COMM_WORLD);
+            sim.total_compute_time = 0.0;
+            sim.total_comm_time = 0.0;
+
+            if (rank == 0)
+                std::cout << "Benchmarking " << bench_steps << " steps...\n";
+
+            Kokkos::Timer timer;
+            sim.step(bench_steps);
+            Kokkos::fence();
+            MPI_Barrier(MPI_COMM_WORLD);
+            runtime = timer.seconds();
+
+            total_mass = sim.get_total_density();
+            total_ke = sim.get_total_kinetic_energy();
+            compute_time = sim.total_compute_time;
+            comm_time = sim.total_comm_time;
+
+            if (rank == 0) {
+                // Calculate Performance Metrics
+                double mlups = (static_cast<double>(Nx) * Ny * bench_steps) /
+                               (runtime * 1e6);
+                double compute_percent = (compute_time / runtime) * 100.0;
+                double comm_percent = (comm_time / runtime) * 100.0;
+                double other_percent = 100.0 - compute_percent - comm_percent;
+
+                // Strong scaling efficiency (relative to 1 task)
+                // This will be computed in post-processing from CSV
+                double cells_per_task = static_cast<double>(Nx) * Ny / size;
+                double mlups_per_task = mlups / size;
+
+                std::cout << "\n--- Final Results ---\n";
+                std::cout << "Total mass: " << total_mass << "\n";
+                std::cout << "Total kinetic energy: " << total_ke << "\n";
+                std::cout << "Runtime: " << runtime << " s\n";
+                std::cout << "Calculation Time (GPU): " << compute_time
+                          << " s (" << compute_percent << "%)\n";
+                std::cout << "Networking Time (MPI): " << comm_time << " s ("
+                          << comm_percent << "%)\n";
+                std::cout << "Other overhead: "
+                          << (runtime - compute_time - comm_time) << " s ("
+                          << other_percent << "%)\n";
+                std::cout << "Performance: " << mlups << " MLUPS\n";
+                std::cout << "Performance per task: " << mlups_per_task
+                          << " MLUPS/task\n";
+                std::cout << "Cells per task: " << cells_per_task << "\n";
+
+                // Write CSV (append mode)
+                std::ofstream outfile;
+                bool file_exists = std::ifstream(csv_file).good();
+                outfile.open(csv_file, std::ios::app);
+
+                // Note: Added host_buffers column
+                if (!file_exists) {
+                    outfile << "scaling_type,dim,Nx,Ny,tasks,steps,omega,"
+                            << "runtime,compute_time,comm_time,other_time,"
+                            << "compute_pct,comm_pct,other_pct,"
+                            << "mlups,mlups_per_task,cells_per_task,"
+                            << "total_mass,total_ke,host_buffers\n";
+                }
+
+                outfile << scaling_type << "," << dim << "," << Nx << "," << Ny
+                        << "," << size << "," << bench_steps << "," << omega
+                        << "," << runtime << "," << compute_time << ","
+                        << comm_time << ","
+                        << (runtime - compute_time - comm_time) << ","
+                        << compute_percent << "," << comm_percent << ","
+                        << other_percent << "," << mlups << ","
+                        << mlups_per_task << "," << cells_per_task << ","
+                        << total_mass << "," << total_ke << ","
+                        << (use_host_buffers ? 1 : 0) << "\n";
+                outfile.close();
+
+                std::cout << "\nResults appended to " << csv_file << "\n";
+            }
+        } // End buffer_options loop
     }
 
     Kokkos::finalize();

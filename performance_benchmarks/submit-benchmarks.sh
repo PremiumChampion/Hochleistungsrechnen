@@ -2,7 +2,7 @@
 set -euo pipefail
 
 STEPS=2000
-QUEUE="gpu_a100_il"
+QUEUE="gpu_a100_short"
 CSV_FILE="benchmark_results.csv"
 
 # Clean previous results
@@ -23,8 +23,8 @@ echo ""
 # -------------------------------------------------------
 echo ">>> Submitting Strong Scaling Benchmarks (Fixed 8000x8000)..."
 
-STRONG_NX=2000
-STRONG_NY=4000
+STRONG_NX=8000
+STRONG_NY=8000
 
 for TASKS in 1 2 4 8 16 32; do
     NODES=$(( (TASKS + 3) / 4 ))
@@ -65,8 +65,8 @@ done
 echo ""
 echo ">>> Submitting Weak Scaling Benchmarks (balanced 2D growth)..."
 
-BASE_NX_PER_TASK=2000
-BASE_NY_PER_TASK=2000
+BASE_NX_PER_TASK=8000
+BASE_NY_PER_TASK=8000
 
 for TASKS in 1 2 4 8 16 32; do
     NODES=$(( (TASKS + 3) / 4 ))

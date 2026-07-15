@@ -45,7 +45,12 @@ int main(int argc, char *argv[]) {
     // 2. Measure analytical and computational viscosity
     if (rank == 0)
         std::cout << "Measuring viscosity vs omega...\n";
-    std::vector<double> omegas = {0.5, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 1.9};
+
+    // std::vector<double> omegas = {0.5, 0.6,
+    // 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 1.9};
+    std::vector<double> omegas = {};
+    for (double i = 0.2; i < 2.0; i += 0.05)
+        omegas.push_back(i);
 
     std::ofstream out;
     if (rank == 0) {

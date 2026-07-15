@@ -450,7 +450,9 @@ void velocity_dir_to_rgb(int local_Nx, int local_Ny, VectorField2D v,
 
             uint8_t r = 0, g = 0, b = 0;
             if (mag > 1e-6 && max_speed > 1e-6) {
+
                 double v_val = mag / max_speed;
+                v_val = Kokkos::pow(v_val, 0.8);
 
                 if (v_val > 1.0) {
                     // Overexposed -> White
