@@ -73,10 +73,20 @@ Simulation::Simulation(int _Nx, int _Ny, double _omega,
 
 #if defined(MPIX_CUDA_AWARE_SUPPORT) && MPIX_CUDA_AWARE_SUPPORT
     cuda_aware_mpi = MPIX_Query_cuda_support();
-    std::cout << "Checking CUDA-aware MPI support..." << endl;
+    if (rank == 0) {
+        std::cout << "Checking CUDA-aware MPI support via OpenMPI extension..."
+                  << std::endl;
+    }
+#elif defined(I_MPI_VERSION)
+    // Intel MPI does not provide a standard query function like OpenMPI,
+    // but is generally CUDA-aware on modern clusters like bwUniCluster.
+    cuda_aware_mpi = true;
 #else
+    // Fallback if neither OpenMPI with CUDA support nor Intel MPI is detected.
+    // Can be overridden in benchmarks.
     cuda_aware_mpi = false;
 #endif
+
     if (rank == 0) {
         std::cout << "CUDA-aware MPI: "
                   << (cuda_aware_mpi ? "Enabled (Direct GPU Comm)"
