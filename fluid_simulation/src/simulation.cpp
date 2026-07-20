@@ -73,6 +73,7 @@ Simulation::Simulation(int _Nx, int _Ny, double _omega,
 
 #if defined(MPIX_CUDA_AWARE_SUPPORT) && MPIX_CUDA_AWARE_SUPPORT
     cuda_aware_mpi = MPIX_Query_cuda_support();
+    std::cout << "Checking CUDA-aware MPI support..." << endl;
 #else
     cuda_aware_mpi = false;
 #endif
