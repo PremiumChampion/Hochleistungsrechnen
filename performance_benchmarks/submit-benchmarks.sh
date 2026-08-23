@@ -26,7 +26,7 @@ echo ">>> Submitting Strong Scaling Benchmarks (Fixed 8000x8000)..."
 STRONG_NX=8000
 STRONG_NY=8000
 
-for TASKS in 1 2 4 8 16 32; do
+for TASKS in 1 2 4 8 16 64; do
     NODES=$(( (TASKS + 3) / 4 ))
     TASKS_PER_NODE=$(( TASKS / NODES ))
     if [ "$TASKS" -lt 4 ]; then

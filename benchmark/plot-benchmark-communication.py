@@ -1,5 +1,6 @@
 import pandas as pd
 import matplotlib.pyplot as plt
+import math as math
 from matplotlib.ticker import FixedLocator, FuncFormatter
 
 # Load data
@@ -37,7 +38,6 @@ def format_axes(ax, tasks):
 def plot_benchmark(ax, df_subset, scaling_type, dim_str):
     """Helper function to plot a single subplot safely."""
     
-    # Handle empty datasets gracefully if some jobs haven't finished
     if df_subset.empty:
         ax.set_title(f"{scaling_type} Scaling ({dim_str})\n(No data available)", fontsize=12)
         ax.text(0.5, 0.5, 'Incomplete/No Data', horizontalalignment='center', 
@@ -50,16 +50,28 @@ def plot_benchmark(ax, df_subset, scaling_type, dim_str):
     if scaling_type == "Strong":
         nx = int(df_subset["Nx"].iloc[0])
         ny = int(df_subset["Ny"].iloc[0])
-        subtitle = f"(Global Grid: {nx} × {ny})"
+        subtitle = f"(Global Grid: {nx} x {ny})"
     else:
-        cells_per_task = int(df_subset["cells_per_task"].iloc[0])
-        subtitle = f"(Local Grid: {cells_per_task:,} Cells/Task)"
+        cells_per_task = int(math.sqrt(int(df_subset["cells_per_task"].iloc[0])))
+        subtitle = f"(Local Grid: {cells_per_task} x {cells_per_task})"
 
     # Plot metrics
-    ax.plot(df_subset["tasks"], df_subset["runtime"], marker="o", linewidth=2, label="Runtime")
-    ax.plot(df_subset["tasks"], df_subset["compute_time"], marker="s", linewidth=2, label="Compute time")
-    ax.plot(df_subset["tasks"], df_subset["comm_time"], marker="^", linewidth=2, label="Comm time")
+    ax.plot(df_subset["tasks"], df_subset["runtime"], marker="o", linewidth=2, label="Runtime", color="tab:blue")
+    ax.plot(df_subset["tasks"], df_subset["compute_time"], marker="s", linewidth=2, label="Compute time", color="tab:orange")
+    ax.plot(df_subset["tasks"], df_subset["comm_time"], marker="^", linewidth=2, label="Communication time", color="tab:green")
     
+    # Add Data Labels above/below the points
+    for _, row in df_subset.iterrows():
+        # Runtime Label (Above)
+        ax.annotate(f"{row['runtime']:.1f}", (row['tasks'], row['runtime']), 
+                    textcoords="offset points", xytext=(0, 6), ha='center', fontsize=8, color='darkblue')
+        # Compute Time Label (Below, to prevent overlapping with runtime)
+        ax.annotate(f"{row['compute_time']:.1f}", (row['tasks'], row['compute_time']), 
+                    textcoords="offset points", xytext=(0, -12), ha='center', fontsize=8, color='darkred')
+        # Comm Time Label (Above)
+        ax.annotate(f"{row['comm_time']:.1f}", (row['tasks'], row['comm_time']), 
+                    textcoords="offset points", xytext=(0, 6), ha='center', fontsize=8, color='darkgreen')
+
     # Styling
     ax.set_title(f"{scaling_type} Scaling ({dim_str})\n{subtitle}", fontsize=12)
     ax.set_xlabel("Tasks [count]")
@@ -77,7 +89,7 @@ plot_benchmark(axes[1, 1], weak_2d,   "Weak",   "2D Decomposition")
 glossary = (
     "Hardware & Units:\n"
     "s = seconds  |  Tasks = Number of allocated MPI processes [count] (1 GPU per task)\n"
-    "Runtime = Total wall-clock time  |  Compute time = NVIDIA A100 GPU calculation  |  Comm time = bwUniCluster MPI network overhead using Host Buffers\n"
+    "Runtime = Total wall-clock time  |  Compute time = NVIDIA A100 GPU calculation  |  Communication time = copy overhead\n"
     "1D Decomposition = Slicing along the Y-axis only  |  2D Decomposition = Slicing along X and Y axes (Grid layout)"
 )
 fig.text(0.5, 0.02, glossary, ha='center', fontsize=10, 
