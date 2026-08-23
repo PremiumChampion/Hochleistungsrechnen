@@ -49,6 +49,10 @@ if(NOT Eigen3_FOUND)
     endif()
 endif()
 
+# ── Kokkos options (must be at top level for correct scoping) ──
+option(USE_CUDA "Enable CUDA backend for Kokkos" OFF)
+option(NO_GLOBAL_KOKKOS "Disable global kokkos_compilation(GLOBAL)" OFF)
+
 find_package(Kokkos 4.7.03)
 if(NOT Kokkos_FOUND)
     include(FetchContent)
@@ -64,22 +68,16 @@ if(NOT Kokkos_FOUND)
     # set(Kokkos_ENABLE_CUDA ON CACHE BOOL "Enable CUDA" FORCE)
     # set(Kokkos_ENABLE_DEBUG ON CACHE BOOL "Enable DEBUG" FORCE)
     # set(Kokkos_ARCH_AMPERE86 ON CACHE BOOL "RTX 3070 Architecture" FORCE)
-    
-    option(USE_CUDA "Enable CUDA backend for Kokkos" OFF)
     if(USE_CUDA)
-    set(Kokkos_ENABLE_CUDA ON CACHE BOOL "Enable Cuda" FORCE)
-        # Target RTX 3070 GPU (Ampere86)
-        # set(Kokkos_ARCH_AMPERE86 ON CACHE BOOL "RTX 3070 Architecture" FORCE)
-        set(Kokkos_ARCH_AMPERE80 ON CACHE BOOL "A100 Architecture" FORCE)
-        else()
+        set(Kokkos_ENABLE_CUDA ON CACHE BOOL "Enable CUDA" FORCE)
+    else()
         set(Kokkos_ENABLE_SERIAL ON CACHE BOOL "Serial Backend" FORCE)
-        endif()
-        
+    endif()
+
     FetchContent_MakeAvailable(kokkos)
-    
-    option(NO_GLOBAL_KOKKOS "Disable global kokkos compilation" OFF)
-    if(USE_CUDA && NOT NO_GLOBAL_KOKKOS)
-      kokkos_compilation(GLOBAL)
+
+    if(USE_CUDA AND NOT NO_GLOBAL_KOKKOS)
+        kokkos_compilation(GLOBAL)
     endif()
 endif()
 

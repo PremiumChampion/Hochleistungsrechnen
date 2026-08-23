@@ -34,6 +34,38 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release -DUSE_CUDA=ON
 cmake --build build -j$(nproc)
 ```
 
+
+ Here are the commands for each environment:     
+       
+ ### 1. NOGPU      
+
+```bash        
+cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DNO_GLOBAL_KOKKOS=ON
+```
+
+### 2. Local — RTX 3050 Ti (Ampere, sm_86)
+ 
+```bash        
+  cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DUSE_CUDA=ON -DKokkos_ARCH_AMPERE86=ON 
+```   
+       
+### 3. Cluster — A100 + H100 (build for both architectures)       
+       
+```bash
+  cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DUSE_CUDA=ON -DKokkos_ARCH_AMPERE80=ON -DKokkos_ARCH_HOPPER90=ON  
+```   
+       
+ If you only need one architecture at a time, pick one:   
+       
+```bash
+# A100 only
+cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DUSE_CUDA=ON -DKokkos_ARCH_AMPERE80=ON 
+
+# H100 only  
+cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DUSE_CUDA=ON -DKokkos_ARCH_HOPPER90=ON 
+```       
+
+
 ## Running the Simulation
 
 The executables are placed in subdirectories under `build/Release/` (or `build/Debug/` depending on your build type). Below are the commands to run the key components.
