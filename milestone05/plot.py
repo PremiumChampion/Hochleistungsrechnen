@@ -23,11 +23,11 @@ if os.path.exists("lid_driven_cavity.csv"):
     
     fig, ax = plt.subplots(figsize=(8, 6.5))
     strm = ax.streamplot(X, Y, U, V, color=speed, cmap='viridis', density=1.5)
-    fig.colorbar(strm.lines, ax=ax, label='Velocity magnitude [lu/ts]')
+    fig.colorbar(strm.lines, ax=ax, label='Velocity magnitude (lu/ts)')
     
     ax.set_title("Lid-driven cavity flow streamlines")
-    ax.set_xlabel("x Position [lu]")
-    ax.set_ylabel("y Position [lu]")
+    ax.set_xlabel("x Position (lu)")
+    ax.set_ylabel("y Position (lu)")
     ax.set_aspect('equal')
     
     glossary = (
@@ -59,16 +59,16 @@ if os.path.exists("centerline_profile.csv"):
     ax.plot(y_norm, u_norm, label="Simulation", color='blue')
     
     # Update labels to indicate percentages
-    ax.set_xlabel("$y / L$ [%]")
-    ax.set_ylabel("$u_x / u_{\mathrm{lid}}$ [%]")
+    ax.set_xlabel("$y / L$ (%)")
+    ax.set_ylabel("$u_x / u_{\mathrm{lid}}$ (%)")
     ax.set_title("Centerline Velocity Profile ($x = L/2$)")
     ax.legend()
     ax.grid()
     
     glossary = (
         "Abbreviations & Base Units:\n"
-        "lu = lattice units (dist)  |  ts = time steps (time)  |  $L$ = total domain height [lu]\n"
-        "$u_{\mathrm{lid}}$ = driving lid velocity [lu/ts]  |  $u_x$ = horizontal fluid velocity [lu/ts]  |  $y$ = vertical position [lu]"
+        "lu = lattice units (dist)  |  ts = time steps (time)  |  $L$ = total domain height (lu)\n"
+        "$u_{\mathrm{lid}}$ = driving lid velocity (lu/ts)  |  $u_x$ = horizontal fluid velocity (lu/ts)  |  $y$ = vertical position (lu)"
     )
     fig.text(0.5, 0.02, glossary, ha='center', fontsize=9, 
              bbox=dict(facecolor='white', alpha=0.9, edgecolor='gray'))

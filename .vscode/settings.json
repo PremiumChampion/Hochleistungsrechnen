@@ -1,6 +1,7 @@
 {
     "cmake.configureArgs": [
-        "-DUSE_CUDA=ON"
+        "-DUSE_CUDA=ON",
+        "-DKokkos_ARCH_AMPERE86=ON"
     ],
     "cmake.debugConfig": {
         "args": [

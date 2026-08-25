@@ -100,8 +100,7 @@ int main(int argc, char *argv[]) {
 
         int current_draw_mode = 1;
         int current_size_idx = 0;
-        std::vector<std::pair<int, int>> sizes = {
-            {400, 300}, {200, 150}, {800, 600}};
+        std::vector<std::pair<int, int>> sizes = {{400, 300}};
 
         while (!state.quit) {
             // Rank 0 handles inputs and populates the synchronization state

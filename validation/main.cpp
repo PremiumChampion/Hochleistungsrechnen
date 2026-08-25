@@ -55,8 +55,8 @@ int main(int argc, char *argv[]) {
                 std::max(max_mass_drift, std::abs(current_mass - initial_mass));
             mass_file << t << "," << current_mass << "\n";
 
-            // 2. Log Centerline Density Profile (every 40 steps)
-            if (t % 40 == 0) {
+            // 2. Log Centerline Density Profile (every 25 steps)
+            if (t % 20 == 0) {
                 auto h_rho = Kokkos::create_mirror_view_and_copy(
                     Kokkos::HostSpace(), sim.rho);
                 int y = sim.local_Ny / 2; // Extract middle slice
